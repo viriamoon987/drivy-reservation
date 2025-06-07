@@ -25,53 +25,32 @@ exports.handler = async (event, context) => {
     };
   }
 
-  // SÉCURITÉ MAXIMALE : SEUL VOTRE SITE EST AUTORISÉ
+  // Permettre l'accès depuis votre site pour tous les visiteurs
   const origin = event.headers.origin || event.headers.referer;
   const host = event.headers.host;
-  const authorizedSite = 'https://6843feaa8563084d7cee48fb--effervescent-cobbler-0316a6.netlify.app';
-
-  console.log('Origin:', origin);
-  console.log('Referer:', event.headers.referer);
-  console.log('Host:', host);
-
-  // Vérifier que la demande vient bien de votre site
-  let isAuthorized = false;
   
-  if (origin && origin === authorizedSite) {
-    isAuthorized = true;
-  } else if (event.headers.referer && event.headers.referer.startsWith(authorizedSite)) {
-    isAuthorized = true;
-  } else if (host && host === '6843feaa8563084d7cee48fb--effervescent-cobbler-0316a6.netlify.app') {
-    isAuthorized = true;
-  }
-
-  if (!isAuthorized) {
-    console.warn('Blocked request - Origin:', origin, 'Referer:', event.headers.referer, 'Host:', host);
+  // Autoriser tous les visiteurs de votre site Netlify
+  if (host && host.includes('effervescent-cobbler-0316a6.netlify.app')) {
     return {
-      statusCode: 403,
+      statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': origin || `https://${host}`,
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Cache-Control': 'no-cache'
       },
-      body: JSON.stringify({ 
-        error: 'Access denied - unauthorized origin',
-        debug: {
-          origin: origin,
-          referer: event.headers.referer,
-          host: host,
-          authorized: authorizedSite
-        }
-      }),
+      body: JSON.stringify({ apiKey }),
     };
   }
 
-  // Succès : retourner la clé API
+  // Bloquer les accès directs ou depuis d'autres sites
   return {
-    statusCode: 200,
+    statusCode: 403,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': authorizedSite,
-      'Cache-Control': 'no-cache'
     },
-    body: JSON.stringify({ apiKey }),
+    body: JSON.stringify({ 
+      error: 'Access denied'
+    }),
   };
 };
