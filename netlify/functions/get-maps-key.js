@@ -6,7 +6,6 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 405,
       headers: {
-        'Allow': 'GET',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ error: 'Method Not Allowed' }),
@@ -26,34 +25,30 @@ exports.handler = async (event, context) => {
     };
   }
 
-  // Optional: Add origin check for extra security
-  const origin = event.headers.origin || event.headers.host;
-  const allowedOrigins = [
-    'https://drivy-calculator.netlify.app', // Remplacez par votre domaine Netlify
-    'http://localhost:8888', // Pour le développement local
-    'http://localhost:3000'  // Pour d'autres serveurs de dev
-  ];
+  // SÉCURITÉ MAXIMALE : SEUL VOTRE SITE EST AUTORISÉ
+  const origin = event.headers.origin || event.headers.referer;
+  const authorizedSite = 'https://6843fd15fa99af229a285f9e--effervescent-cobbler-0316a6.netlify.app';
 
-  // En production, décommentez cette vérification :
-  /*
-  if (!allowedOrigins.includes(origin)) {
+  // Vérifier que la demande vient bien de votre site
+  if (!origin || !origin.startsWith(authorizedSite)) {
     return {
       statusCode: 403,
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ error: 'Forbidden' }),
+      body: JSON.stringify({ 
+        error: 'Access denied - unauthorized origin'
+      }),
     };
   }
-  */
 
+  // Succès : retourner la clé API
   return {
     statusCode: 200,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*', // En production, utilisez votre domaine spécifique
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Cache-Control': 'no-cache', // Ne pas mettre en cache la clé API
+      'Access-Control-Allow-Origin': authorizedSite,
+      'Cache-Control': 'no-cache'
     },
     body: JSON.stringify({ apiKey }),
   };
