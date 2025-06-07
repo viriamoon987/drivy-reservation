@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Drivy Taxi Calculator</title>
+    <link rel="icon" type="image/png" href="drivy.png">
+    <link rel="shortcut icon" type="image/png" href="drivy.png">
     
     <style>
         * {
@@ -877,27 +879,40 @@
 
         async function getGoogleMapsApiKey() {
             try {
+                // Essayer d'abord la fonction Netlify
                 const response = await fetch('/.netlify/functions/get-maps-key');
-                const data = await response.json();
-                return data.apiKey;
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.apiKey;
+                }
+                throw new Error('Netlify function not available');
             } catch (error) {
-                console.error('Error fetching API key:', error);
-                return null;
+                console.warn('Netlify function not available, using environment variable');
+                // Fallback : utiliser une variable d'environnement publique (temporaire)
+                // IMPORTANT: En production, utilisez toujours la fonction Netlify pour la sécurité
+                return window.GOOGLE_MAPS_API_KEY || null;
             }
         }
 
         async function initMap() {
-            const apiKey = await getGoogleMapsApiKey();
-            if (!apiKey) {
-                document.getElementById('map').innerHTML = 
-                    '<div style="padding: 20px; text-align: center; color: red;">Erreur de chargement de la carte</div>';
-                return;
-            }
+            try {
+                const apiKey = await getGoogleMapsApiKey();
+                if (!apiKey) {
+                    throw new Error('No API key available');
+                }
 
-            // Load Google Maps API
-            const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMap`;
-            document.head.appendChild(script);
+                // Load Google Maps API
+                const script = document.createElement('script');
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMap`;
+                script.onerror = () => {
+                    throw new Error('Failed to load Google Maps script');
+                };
+                document.head.appendChild(script);
+            } catch (error) {
+                console.error('Error initializing map:', error);
+                document.getElementById('map').innerHTML = 
+                    '<div style="padding: 20px; text-align: center; color: red;">Erreur de chargement de la carte. Vérifiez votre clé API Google Maps.</div>';
+            }
         }
 
         function initGoogleMap() {
