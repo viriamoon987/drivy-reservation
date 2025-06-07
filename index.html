@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drivy Taxi Calculator</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', 'Roboto', sans-serif;
+        }
+
+        body {
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+        }
+
+        .header {
+            background: #666666;
+            padding: 15px 20px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .title {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .reset-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 6px 8px;
+            border-radius: 5px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .reset-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .content {
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: bold;
+            color: #333;
+            font-size: 13px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 13px;
+            background: white;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #888;
+        }
+
+        #map {
+            width: 100%;
+            height: 300px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .location-inputs {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .location-input {
+            position: relative;
+            margin-bottom: 10px;
+        }
+
+        .location-input input {
+            padding-left: 30px;
+        }
+
+        .location-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 14px;
+            z-index: 2;
+        }
+
+        .departure-icon { color: #4CAF50; }
+        .stop-icon { color: #FF9800; }
+        .destination-icon { color: #f44336; }
+
+        .add-stop-btn {
+            background: #25D366;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .add-stop-btn:hover {
+            background: #128C7E;
+        }
+
+        .stop-container {
+            position: relative;
+            padding-right: 30px;
+            margin-bottom: 15px;
+        }
+
+        .stop-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .stop-input-wrapper {
+            flex: 1;
+        }
+
+        .stop-time-wrapper {
+            width: 120px;
+        }
+
+        .stop-time-wrapper label {
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .stop-time-wrapper input {
+            text-align: center;
+            font-size: 12px;
+            padding: 6px 4px;
+        }
+
+        .remove-stop-btn {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #f44336;
+            color: white;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .distance-display {
+            background: #e3f2fd;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            margin-bottom: 15px;
+            border: 1px solid #90caf9;
+            display: none;
+        }
+
+        .distance-display .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .distance-display .value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1976d2;
+        }
+
+        .time-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 15px;
+        }
+
+        .time-item {
+            flex: 1;
+        }
+
+        .rate-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px;
+            background: #f8f8f8;
+            border-radius: 4px;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #555;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: auto;
+        }
+
+        .checkbox-item label {
+            margin-bottom: 0;
+            font-weight: normal;
+            font-size: 12px;
+            color: #555;
+        }
+
+        .baggage-container {
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 15px;
+            background: #fafafa;
+            margin-bottom: 15px;
+        }
+
+        .baggage-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 15px;
+        }
+
+        .baggage-item {
+            flex: 1;
+        }
+
+        .baggage-item label {
+            font-size: 11px;
+            margin-bottom: 4px;
+            text-align: center;
+            display: block;
+        }
+
+        .baggage-item input {
+            text-align: center;
+            font-size: 12px;
+            padding: 6px 4px;
+        }
+
+        .van-option {
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .van-option.show {
+            display: block;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #444;
+            margin-bottom: 8px;
+            margin-top: 10px;
+        }
+
+        .sub-title {
+            font-size: 12px;
+            color: #777;
+            margin-bottom: 6px;
+        }
+
+        .bulky-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-top: 8px;
+            display: none;
+        }
+
+        .bulky-warning.show {
+            display: block;
+        }
+
+        .fare-display {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: center;
+            border: 1px solid #e0e0e0;
+        }
+
+        .fare-display .disclaimer {
+            font-size: 11px;
+            color: #777;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+
+        .fare-display .price {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .vehicle-note {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .route-prompt {
+            font-size: 16px;
+            color: #666;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        .request-ride-btn {
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .request-ride-btn:hover {
+            background: linear-gradient(135deg, #128C7E 0%, #075E54 100%);
+            transform: translateY(-2px);
+        }
+
+        .language-toggle {
+            cursor: pointer;
+            transition: transform 0.2s;
+            width: 30px;
+            height: 20px;
+            border-radius: 3px;
+            border: 1px solid rgba(255,255,255,0.3);
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #333;
+        }
+
+        .language-toggle:hover {
+            transform: scale(1.1);
+        }
+
+        .autocomplete-suggestions {
+            position: absolute;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            width: 100%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .autocomplete-suggestion {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+
+        .autocomplete-suggestion:hover {
+            background: #f5f5f5;
+        }
+
+        .autocomplete-suggestion:last-child {
+            border-bottom: none;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            margin: 20px;
+            padding: 24px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+
+        .close-btn:hover {
+            background: #f0f0f0;
+        }
+
+        .modal-form-group {
+            margin-bottom: 16px;
+        }
+
+        .modal-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: bold;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .modal-input, .modal-select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .modal-input:focus, .modal-select:focus {
+            outline: none;
+            border-color: #25D366;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .modal-btn-cancel {
+            background: #f8f9fa;
+            color: #666;
+            border: 1px solid #e0e0e0;
+        }
+
+        .modal-btn-cancel:hover {
+            background: #e9ecef;
+        }
+
+        .modal-btn-confirm {
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            color: white;
+        }
+
+        .modal-btn-confirm:hover {
+            background: linear-gradient(135deg, #128C7E 0%, #075E54 100%);
+        }
+
+        .name-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .name-row .modal-form-group {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">D</div>
+                <h1 class="title" id="headerTitle">Calcule ton trajet</h1>
+            </div>
+            <div class="header-right">
+                <button class="reset-btn" onclick="resetForm()">↻</button>
+                <div class="language-toggle" onclick="toggleLanguage()" id="languageToggle">🇬🇧</div>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Google Map -->
+            <div id="map"></div>
+
+            <!-- Location Inputs -->
+            <div class="location-inputs">
+                <div class="location-input">
+                    <span class="location-icon departure-icon">●</span>
+                    <input type="text" id="departure" placeholder="Point de départ">
+                    <div id="departure-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
+                </div>
+                
+                <div id="stopsContainer"></div>
+                
+                <button class="add-stop-btn" onclick="addStop()">
+                    <span>+</span>
+                    <span id="addStopText">Ajouter un arrêt</span>
+                </button>
+                
+                <div class="location-input">
+                    <span class="location-icon destination-icon">●</span>
+                    <input type="text" id="destination" placeholder="Destination">
+                    <div id="destination-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
+                </div>
+            </div>
+
+            <!-- Distance Display -->
+            <div class="distance-display" id="distanceDisplay">
+                <div class="label" id="distanceLabel">Distance totale</div>
+                <div class="value" id="totalDistance">0 km</div>
+            </div>
+
+            <div class="form-group">
+                <div class="time-row">
+                    <div class="time-item">
+                        <label id="pickupTimeLabel">Heure de prise en charge</label>
+                        <input type="time" id="pickupTime" onchange="updateRateIndicator(); calculateFare()">
+                        <div class="rate-indicator">
+                            <span id="rateIcon">☀️</span>
+                            <span id="rateText">Tarif jour</span>
+                        </div>
+                    </div>
+                    <div class="time-item">
+                        <label id="trafficTimeLabel">Temps dans le trafic (min)</label>
+                        <input type="number" id="trafficTime" min="0" value="0" oninput="calculateFare()">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="checkbox-item">
+                    <input type="checkbox" id="departureUpHigh" onchange="calculateFare()">
+                    <label for="departureUpHigh" id="departureUpHighLabel">Point de départ en hauteur</label>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" id="destinationUpHigh" onchange="calculateFare()">
+                    <label for="destinationUpHigh" id="destinationUpHighLabel">Destination en hauteur</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label id="passengersLabel">👤 Nombre de passagers</label>
+                <input type="number" id="passengers" min="1" value="1" oninput="calculateFare(); toggleVanBooking()">
+            </div>
+
+            <div class="van-option" id="vanOption">
+                <div class="checkbox-item">
+                    <input type="checkbox" id="vanBooking" onchange="calculateFare()">
+                    <label for="vanBooking" id="vanBookingLabel">🚐 Réserver un Van</label>
+                </div>
+            </div>
+
+            <div class="baggage-container">
+                <div class="baggage-row">
+                    <div class="baggage-item">
+                        <label id="baggageCheckedLabel">Bagages soute</label>
+                        <input type="number" id="baggageChecked" min="0" value="0" oninput="calculateFare(); checkVehicleLimit()">
+                    </div>
+                    <div class="baggage-item">
+                        <label id="baggageCabinLabel">Bagages cabine</label>
+                        <input type="number" id="baggageCabin" min="0" value="0" oninput="calculateFare(); checkVehicleLimit()">
+                    </div>
+                    <div class="baggage-item">
+                        <label id="baggageBagsLabel">Sacs 5kg</label>
+                        <input type="number" id="baggageBags" min="0" value="0" oninput="calculateFare()">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0;">
+                    <div class="section-title" id="bulkyItemsTitle">Encombrants</div>
+                    <div class="sub-title" id="bulkyItemsSubtitle">(bagages hors taille standard, glacière, cantine, planche de surf, vélo, sac de golf, poussette, fauteuil roulant, etc.)</div>
+                    <select id="bulkyItems" onchange="calculateFare(); checkVehicleLimit()">
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="plus">+</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="bulky-warning" id="vehicleWarning">
+                <span id="vehicleWarningText">⚠️ Vous aurez probablement besoin d'un véhicule supplémentaire</span>
+            </div>
+
+            <div class="fare-display">
+                <div id="fareContent">
+                    <div class="route-prompt" id="routePrompt">Veuillez entrer l'itinéraire pour avoir le tarif</div>
+                </div>
+            </div>
+
+            <button class="request-ride-btn" onclick="openRequestModal()">
+                <span id="requestRideText">Demander une course</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal de demande de course -->
+    <div class="modal" id="requestModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Complément d'informations</h2>
+                <button class="close-btn" onclick="closeRequestModal()">&times;</button>
+            </div>
+
+            <form id="requestForm">
+                <div class="modal-form-group">
+                    <label class="modal-label" id="tripDateLabel">Date de la course</label>
+                    <input type="date" class="modal-input" id="tripDate" required>
+                </div>
+
+                <div class="name-row">
+                    <div class="modal-form-group">
+                        <label class="modal-label" id="firstNameLabel">Prénom</label>
+                        <input type="text" class="modal-input" id="firstName" required>
+                    </div>
+                    <div class="modal-form-group">
+                        <label class="modal-label" id="lastNameLabel">Nom</label>
+                        <input type="text" class="modal-input" id="lastName" required>
+                    </div>
+                </div>
+
+                <div class="modal-form-group">
+                    <label class="modal-label" id="flightFerryLabel">Numéro de vol ou ferry (optionnel)</label>
+                    <input type="text" class="modal-input" id="flightFerry" placeholder="Ex: AF073 ou Ferry Terevau">
+                </div>
+
+                <div class="modal-form-group">
+                    <label class="modal-label" id="paymentMethodLabel">Moyen de paiement</label>
+                    <select class="modal-select" id="paymentMethod" required>
+                        <option value="">-- Choisir --</option>
+                        <option value="cash_xpf">Cash en XPF</option>
+                        <option value="cash_usd">Cash en USD</option>
+                        <option value="card_eur">Visa/MasterCard en EUR</option>
+                        <option value="card_usd">Visa/MasterCard en USD</option>
+                    </select>
+                </div>
+
+                <div class="modal-buttons">
+                    <button type="button" class="modal-btn modal-btn-cancel" onclick="closeRequestModal()" id="cancelBtn">Annuler</button>
+                    <button type="submit" class="modal-btn modal-btn-confirm" id="sendBtn">Envoyer la demande sur WhatsApp</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentLang = 'fr';
+        let map;
+        let directionsService;
+        let directionsRenderer;
+        let markers = [];
+        let totalDistanceKm = 0;
+        let searchTimeout;
+        let autocompleteService;
+        let placesService;
+
+        const translations = {
+            fr: {
+                headerTitle: "Calcule ton trajet",
+                departurePoint: "Point de départ",
+                destination: "Destination",
+                addStopText: "Ajouter un arrêt",
+                distanceLabel: "Distance totale",
+                pickupTimeLabel: "Heure de prise en charge",
+                trafficTimeLabel: "Temps dans le trafic (min)",
+                departureUpHighLabel: "Point de départ en hauteur",
+                destinationUpHighLabel: "Destination en hauteur",
+                passengersLabel: "👤 Nombre de passagers",
+                vanBookingLabel: "🚐 Réserver un Van",
+                baggageCheckedLabel: "Bagages soute",
+                baggageCabinLabel: "Bagages cabine",
+                baggageBagsLabel: "Sacs 5kg",
+                bulkyItemsTitle: "Encombrants",
+                bulkyItemsSubtitle: "(bagages hors taille standard, glacière, cantine, planche de surf, vélo, sac de golf, poussette, fauteuil roulant, etc.)",
+                vehicleWarningText: "⚠️ Vous aurez probablement besoin d'un véhicule supplémentaire",
+                routePrompt: "Veuillez entrer l'itinéraire pour avoir le tarif",
+                requestRideText: "Demander une course",
+                modalTitle: "Complément d'informations",
+                tripDateLabel: "Date de la course",
+                firstNameLabel: "Prénom",
+                lastNameLabel: "Nom",
+                flightFerryLabel: "Numéro de vol ou ferry (optionnel)",
+                paymentMethodLabel: "Moyen de paiement",
+                cancelBtn: "Annuler",
+                sendBtn: "Envoyer la demande sur WhatsApp",
+                rateTextDay: "Tarif jour",
+                rateTextNight: "Tarif nuit",
+                disclaimer: "C'est une bonne estimation du prix final mais le chauffeur utilisera le taximètre pour avoir le tarif exacte",
+                vehicleNote: "Pour 1 véhicule"
+            },
+            en: {
+                headerTitle: "Calculate your trip",
+                departurePoint: "Departure point",
+                destination: "Destination",
+                addStopText: "Add a stop",
+                distanceLabel: "Total distance",
+                pickupTimeLabel: "Pickup time",
+                trafficTimeLabel: "Traffic time (min)",
+                departureUpHighLabel: "Departure point up high",
+                destinationUpHighLabel: "Destination up high",
+                passengersLabel: "👤 Number of passengers",
+                vanBookingLabel: "🚐 Book a Van",
+                baggageCheckedLabel: "Checked bags",
+                baggageCabinLabel: "Cabin bags",
+                baggageBagsLabel: "Bags 5kg",
+                bulkyItemsTitle: "Bulky items",
+                bulkyItemsSubtitle: "(oversized luggage, cooler, canteen, surfboard, bike, golf bag, stroller, wheelchair, etc.)",
+                vehicleWarningText: "⚠️ You will probably need an additional vehicle",
+                routePrompt: "Please enter the route to get the fare",
+                requestRideText: "Request a Ride",
+                modalTitle: "Additional Information",
+                tripDateLabel: "Trip Date",
+                firstNameLabel: "First Name",
+                lastNameLabel: "Last Name",
+                flightFerryLabel: "Flight or Ferry Number (optional)",
+                paymentMethodLabel: "Payment Method",
+                cancelBtn: "Cancel",
+                sendBtn: "Send Request on WhatsApp",
+                rateTextDay: "Day rate",
+                rateTextNight: "Night rate",
+                disclaimer: "This is a good estimate of the final price but the driver will use the taximeter for the exact fare",
+                vehicleNote: "For 1 vehicle"
+            }
+        };
+
+        // Base de données des lieux principaux de Tahiti
+        const tahitiPlaces = [
+            { name: "Aéroport International de Tahiti-Faa'a", lat: -17.5537, lon: -149.6070 },
+            { name: "Port Autonome de Papeete", lat: -17.5335, lon: -149.5683 },
+            { name: "Marina Taina", lat: -17.5808, lon: -149.6209 },
+            { name: "InterContinental Tahiti Resort", lat: -17.5070, lon: -149.6039 },
+            { name: "Hilton Hotel Tahiti", lat: -17.5488, lon: -149.5654 },
+            { name: "Sofitel Tahiti Ia Ora Beach Resort", lat: -17.5510, lon: -149.5643 },
+            { name: "Carrefour Punaauia", lat: -17.5710, lon: -149.6095 },
+            { name: "Centre Vaima", lat: -17.5361, lon: -149.5672 },
+            { name: "Marché de Papeete", lat: -17.5337, lon: -149.5653 },
+            { name: "Université de la Polynésie française", lat: -17.5769, lon: -149.6121 },
+            { name: "Hôpital du Taaone", lat: -17.5542, lon: -149.5580 },
+            { name: "Musée de Tahiti et des Îles", lat: -17.6195, lon: -149.6147 },
+            { name: "Point Vénus", lat: -17.4974, lon: -149.4941 },
+            { name: "Centre-ville de Papeete", lat: -17.5351, lon: -149.5666 }
+        ];
+
+        async function getGoogleMapsApiKey() {
+            try {
+                const response = await fetch('/.netlify/functions/get-maps-key');
+                const data = await response.json();
+                return data.apiKey;
+            } catch (error) {
+                console.error('Error fetching API key:', error);
+                return null;
+            }
+        }
+
+        async function initMap() {
+            const apiKey = await getGoogleMapsApiKey();
+            if (!apiKey) {
+                document.getElementById('map').innerHTML = 
+                    '<div style="padding: 20px; text-align: center; color: red;">Erreur de chargement de la carte</div>';
+                return;
+            }
+
+            // Load Google Maps API
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMap`;
+            document.head.appendChild(script);
+        }
+
+        function initGoogleMap() {
+            // Center on Tahiti
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: -17.6509, lng: -149.4260 },
+                zoom: 11,
+                styles: [
+                    {
+                        featureType: "poi",
+                        elementType: "labels",
+                        stylers: [{ visibility: "off" }]
+                    }
+                ]
+            });
+
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer({
+                suppressMarkers: false,
+                polylineOptions: {
+                    strokeColor: '#4285F4',
+                    strokeWeight: 6,
+                    strokeOpacity: 0.8
+                }
+            });
+            directionsRenderer.setMap(map);
+
+            autocompleteService = new google.maps.places.AutocompleteService();
+            placesService = new google.maps.places.PlacesService(map);
+
+            setupAutocomplete('departure');
+            setupAutocomplete('destination');
+        }
+
+        function setupAutocomplete(inputId) {
+            const input = document.getElementById(inputId);
+            const suggestionsDiv = document.getElementById(inputId + '-suggestions');
+            
+            input.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                const query = this.value;
+                
+                if (query.length < 2) {
+                    suggestionsDiv.style.display = 'none';
+                    return;
+                }
+                
+                searchTimeout = setTimeout(() => {
+                    searchLocation(query, inputId);
+                }, 300);
+            });
+            
+            document.addEventListener('click', function(e) {
+                if (!input.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.style.display = 'none';
+                }
+            });
+        }
+
+        function searchLocation(query, inputId) {
+            const suggestionsDiv = document.getElementById(inputId + '-suggestions');
+            
+            // Search local places first
+            const localResults = searchLocalPlaces(query);
+            const suggestions = localResults.map(place => ({
+                description: place.name,
+                place_id: null,
+                geometry: { location: { lat: place.lat, lng: place.lon } },
+                isLocal: true
+            }));
+
+            // Search with Google Places if autocompleteService is available
+            if (autocompleteService) {
+                autocompleteService.getPlacePredictions({
+                    input: query,
+                    location: new google.maps.LatLng(-17.6509, -149.4260),
+                    radius: 50000,
+                    componentRestrictions: { country: 'pf' }
+                }, (predictions, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK) {
+                        const combinedResults = [...suggestions, ...predictions.slice(0, 5)];
+                        displaySuggestions(combinedResults.slice(0, 8), suggestionsDiv, inputId);
+                    } else {
+                        displaySuggestions(suggestions, suggestionsDiv, inputId);
+                    }
+                });
+            } else {
+                displaySuggestions(suggestions, suggestionsDiv, inputId);
+            }
+        }
+
+        function searchLocalPlaces(query) {
+            const lowerQuery = query.toLowerCase();
+            return tahitiPlaces.filter(place => 
+                place.name.toLowerCase().includes(lowerQuery)
+            ).slice(0, 5);
+        }
+
+        function displaySuggestions(results, suggestionsDiv, inputId) {
+            if (results.length > 0) {
+                suggestionsDiv.innerHTML = '';
+                results.forEach(result => {
+                    const div = document.createElement('div');
+                    div.className = 'autocomplete-suggestion';
+                    
+                    let displayName = result.description || result.structured_formatting?.main_text || 'Location';
+                    if (result.isLocal) {
+                        displayName = '📍 ' + displayName;
+                    }
+                    
+                    div.textContent = displayName;
+                    div.onclick = function() {
+                        selectLocation(inputId, result);
+                    };
+                    suggestionsDiv.appendChild(div);
+                });
+                suggestionsDiv.style.display = 'block';
+            } else {
+                suggestionsDiv.innerHTML = 
+                    '<div class="autocomplete-suggestion" style="color: #999; font-style: italic;">Aucun résultat trouvé</div>';
+                suggestionsDiv.style.display = 'block';
+            }
+        }
+
+        function selectLocation(inputId, location) {
+            const input = document.getElementById(inputId);
+            const suggestionsDiv = document.getElementById(inputId + '-suggestions');
+            
+            input.value = location.description || location.structured_formatting?.main_text || 'Location sélectionnée';
+            suggestionsDiv.style.display = 'none';
+            
+            if (location.geometry && location.geometry.location) {
+                input.dataset.lat = location.geometry.location.lat;
+                input.dataset.lng = location.geometry.location.lng;
+                calculateRoute();
+            } else if (location.place_id && placesService) {
+                placesService.getDetails({
+                    placeId: location.place_id,
+                    fields: ['geometry']
+                }, (place, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK) {
+                        input.dataset.lat = place.geometry.location.lat();
+                        input.dataset.lng = place.geometry.location.lng();
+                        calculateRoute();
+                    }
+                });
+            }
+        }
+
+        function addStop() {
+            const stopsContainer = document.getElementById('stopsContainer');
+            const stopIndex = stopsContainer.children.length;
+            
+            const stopDiv = document.createElement('div');
+            stopDiv.className = 'stop-container';
+            stopDiv.innerHTML = `
+                <div class="stop-row">
+                    <div class="stop-input-wrapper location-input">
+                        <span class="location-icon stop-icon">●</span>
+                        <input type="text" id="stop${stopIndex}" placeholder="${currentLang === 'fr' ? 'Arrêt' : 'Stop'} ${stopIndex + 1}">
+                        <div id="stop${stopIndex}-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
+                    </div>
+                    <div class="stop-time-wrapper">
+                        <label>${currentLang === 'fr' ? 'Temps d\'attente (min)' : 'Waiting time (min)'}</label>
+                        <input type="number" id="stopTime${stopIndex}" min="0" value="0" oninput="calculateFare()">
+                    </div>
+                    <button class="remove-stop-btn" onclick="removeStop(${stopIndex})">×</button>
+                </div>
+            `;
+            
+            stopsContainer.appendChild(stopDiv);
+            setupAutocomplete(`stop${stopIndex}`);
+        }
+
+        function removeStop(index) {
+            const stopsContainer = document.getElementById('stopsContainer');
+            const stopContainers = stopsContainer.querySelectorAll('.stop-container');
+            
+            if (stopContainers[index]) {
+                stopContainers[index].remove();
+                
+                // Reindex remaining stops
+                const remainingStops = stopsContainer.querySelectorAll('.stop-container');
+                remainingStops.forEach((stop, i) => {
+                    const input = stop.querySelector('input[id^="stop"]:not([id^="stopTime"])');
+                    const timeInput = stop.querySelector('input[id^="stopTime"]');
+                    const suggestionsDiv = stop.querySelector('.autocomplete-suggestions');
+                    
+                    input.id = `stop${i}`;
+                    input.placeholder = `${currentLang === 'fr' ? 'Arrêt' : 'Stop'} ${i + 1}`;
+                    
+                    timeInput.id = `stopTime${i}`;
+                    suggestionsDiv.id = `stop${i}-suggestions`;
+                    
+                    const removeBtn = stop.querySelector('.remove-stop-btn');
+                    removeBtn.setAttribute('onclick', `removeStop(${i})`);
+                    
+                    setupAutocomplete(`stop${i}`);
+                });
+                
+                calculateRoute();
+            }
+        }
+
+        function calculateRoute() {
+            if (!directionsService || !directionsRenderer) return;
+            
+            const departureInput = document.getElementById('departure');
+            const destinationInput = document.getElementById('destination');
+            
+            if (!departureInput.dataset.lat || !destinationInput.dataset.lat) {
+                return;
+            }
+            
+            const origin = new google.maps.LatLng(
+                parseFloat(departureInput.dataset.lat),
+                parseFloat(departureInput.dataset.lng)
+            );
+            
+            const destination = new google.maps.LatLng(
+                parseFloat(destinationInput.dataset.lat),
+                parseFloat(destinationInput.dataset.lng)
+            );
+            
+            // Add waypoints for stops
+            const waypoints = [];
+            const stopInputs = document.querySelectorAll('[id^="stop"]:not([id^="stopTime"])');
+            stopInputs.forEach(input => {
+                if (input.dataset.lat && input.dataset.lng) {
+                    waypoints.push({
+                        location: new google.maps.LatLng(
+                            parseFloat(input.dataset.lat),
+                            parseFloat(input.dataset.lng)
+                        ),
+                        stopover: true
+                    });
+                }
+            });
+            
+            directionsService.route({
+                origin: origin,
+                destination: destination,
+                waypoints: waypoints,
+                travelMode: google.maps.TravelMode.DRIVING
+            }, (result, status) => {
+                if (status === google.maps.DirectionsStatus.OK) {
+                    directionsRenderer.setDirections(result);
+                    
+                    // Calculate total distance
+                    let totalDistance = 0;
+                    result.routes[0].legs.forEach(leg => {
+                        totalDistance += leg.distance.value;
+                    });
+                    
+                    totalDistanceKm = totalDistance / 1000;
+                    document.getElementById('totalDistance').textContent = totalDistanceKm.toFixed(1) + ' km';
+                    document.getElementById('distanceDisplay').style.display = 'block';
+                    
+                    // Update fare display
+                    const fareContent = document.getElementById('fareContent');
+                    fareContent.innerHTML = `
+                        <div class="disclaimer">${translations[currentLang].disclaimer}</div>
+                        <div class="price" id="totalPrice">1000 XPF</div>
+                        <div class="vehicle-note">${translations[currentLang].vehicleNote}</div>
+                    `;
+                    
+                    calculateFare();
+                }
+            });
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'fr' ? 'en' : 'fr';
+            
+            const languageToggle = document.getElementById('languageToggle');
+            languageToggle.textContent = currentLang === 'fr' ? '🇬🇧' : '🇫🇷';
+            
+            // Update all text elements
+            Object.keys(translations[currentLang]).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    if (element.tagName === 'INPUT' && element.hasAttribute('placeholder')) {
+                        element.placeholder = translations[currentLang][key];
+                    } else {
+                        element.textContent = translations[currentLang][key];
+                    }
+                }
+            });
+            
+            updateRateIndicator();
+            
+            // Update fare display if route exists
+            if (totalDistanceKm > 0) {
+                const fareContent = document.getElementById('fareContent');
+                fareContent.innerHTML = `
+                    <div class="disclaimer">${translations[currentLang].disclaimer}</div>
+                    <div class="price" id="totalPrice">${document.getElementById('totalPrice')?.textContent || '1000 XPF'}</div>
+                    <div class="vehicle-note">${translations[currentLang].vehicleNote}</div>
+                `;
+                calculateFare();
+            }
+        }
+
+        function updateRateIndicator() {
+            const time = document.getElementById('pickupTime').value;
+            const rateIcon = document.getElementById('rateIcon');
+            const rateText = document.getElementById('rateText');
+            
+            if (time) {
+                const hour = parseInt(time.split(':')[0]);
+                const isDay = hour >= 6 && hour < 20;
+                
+                if (isDay) {
+                    rateIcon.textContent = '☀️';
+                    rateText.textContent = translations[currentLang].rateTextDay;
+                } else {
+                    rateIcon.textContent = '🌙';
+                    rateText.textContent = translations[currentLang].rateTextNight;
+                }
+            }
+        }
+
+        function calculateFare() {
+            if (totalDistanceKm === 0) return;
+            
+            let total = 1000; // Base fare
+            
+            // Distance cost
+            const time = document.getElementById('pickupTime').value;
+            let ratePerKm = 160;
+            
+            if (time) {
+                const hour = parseInt(time.split(':')[0]);
+                const isNight = hour < 6 || hour >= 20;
+                if (isNight) ratePerKm = 260;
+            }
+            
+            const distanceCost = Math.round(totalDistanceKm * ratePerKm);
+            total += distanceCost;
+            
+            // Additional costs
+            const passengers = parseInt(document.getElementById('passengers').value || 1);
+            if (passengers >= 5) total += 500;
+            
+            // Waiting time at stops
+            let totalWaitingTime = 0;
+            const stopTimeInputs = document.querySelectorAll('[id^="stopTime"]');
+            stopTimeInputs.forEach(input => {
+                totalWaitingTime += parseInt(input.value || 0);
+            });
+            
+            // Traffic time
+            const trafficTime = parseInt(document.getElementById('trafficTime').value || 0);
+            const totalTime = totalWaitingTime + trafficTime;
+            if (totalTime > 0) total += totalTime * 42;
+            
+            // Baggage
+            const baggageChecked = parseInt(document.getElementById('baggageChecked').value || 0);
+            const baggageCabin = parseInt(document.getElementById('baggageCabin').value || 0);
+            const baggageBags = parseInt(document.getElementById('baggageBags').value || 0);
+            const totalBaggage = baggageChecked + baggageCabin + baggageBags;
+            if (totalBaggage > 0) total += totalBaggage * 100;
+            
+            // Bulky items
+            const bulkyItems = document.getElementById('bulkyItems').value;
+            if (bulkyItems === "1") total += 500;
+            else if (bulkyItems === "plus") total += 500;
+            
+            // Height surcharges
+            if (document.getElementById('departureUpHigh').checked) total += 500;
+            if (document.getElementById('destinationUpHigh').checked) total += 500;
+            
+            // Van booking
+            if (document.getElementById('vanBooking').checked) total += 500;
+            
+            const priceElement = document.getElementById('totalPrice');
+            if (priceElement) {
+                priceElement.textContent = `${total} XPF`;
+            }
+        }
+
+        function toggleVanBooking() {
+            const passengers = parseInt(document.getElementById('passengers').value);
+            const vanOption = document.getElementById('vanOption');
+            
+            if (passengers <= 2) {
+                vanOption.classList.add('show');
+            } else {
+                vanOption.classList.remove('show');
+                document.getElementById('vanBooking').checked = false;
+            }
+            
+            checkVehicleLimit();
+        }
+
+        function checkVehicleLimit() {
+            const baggageChecked = parseInt(document.getElementById('baggageChecked').value || 0);
+            const baggageCabin = parseInt(document.getElementById('baggageCabin').value || 0);
+            const bulkyItems = document.getElementById('bulkyItems').value;
+            const passengers = parseInt(document.getElementById('passengers').value || 1);
+            const vehicleWarning = document.getElementById('vehicleWarning');
+            
+            let needsAdditionalVehicle = false;
+            
+            // Check if additional vehicle needed
+            const totalBaggageEquiv = baggageChecked + (baggageCabin / 2);
+            if (totalBaggageEquiv > 8 || passengers > 8 || bulkyItems === "plus") {
+                needsAdditionalVehicle = true;
+            }
+            
+            if (needsAdditionalVehicle) {
+                vehicleWarning.classList.add('show');
+            } else {
+                vehicleWarning.classList.remove('show');
+            }
+        }
+
+        function resetForm() {
+            // Reset all form fields
+            document.getElementById('departure').value = '';
+            document.getElementById('departure').removeAttribute('data-lat');
+            document.getElementById('departure').removeAttribute('data-lng');
+            document.getElementById('destination').value = '';
+            document.getElementById('destination').removeAttribute('data-lat');
+            document.getElementById('destination').removeAttribute('data-lng');
+            document.getElementById('trafficTime').value = '0';
+            document.getElementById('baggageChecked').value = '0';
+            document.getElementById('baggageCabin').value = '0';
+            document.getElementById('baggageBags').value = '0';
+            document.getElementById('passengers').value = '1';
+            document.getElementById('bulkyItems').value = '0';
+            document.getElementById('departureUpHigh').checked = false;
+            document.getElementById('destinationUpHigh').checked = false;
+            document.getElementById('vanBooking').checked = false;
+            
+            // Clear stops
+            document.getElementById('stopsContainer').innerHTML = '';
+            
+            // Clear route
+            if (directionsRenderer) {
+                directionsRenderer.setDirections({routes: []});
+            }
+            
+            // Reset distance and fare display
+            totalDistanceKm = 0;
+            document.getElementById('distanceDisplay').style.display = 'none';
+            
+            // Reset fare display
+            const fareContent = document.getElementById('fareContent');
+            fareContent.innerHTML = `<div class="route-prompt">${translations[currentLang].routePrompt}</div>`;
+            
+            // Set current time
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('pickupTime').value = `${hours}:${minutes}`;
+            
+            // Hide warnings
+            document.getElementById('vanOption').classList.remove('show');
+            document.getElementById('vehicleWarning').classList.remove('show');
+            
+            updateRateIndicator();
+        }
+
+        function openRequestModal() {
+            const modal = document.getElementById('requestModal');
+            modal.classList.add('show');
+            
+            // Set default date to tomorrow
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            document.getElementById('tripDate').value = tomorrow.toISOString().split('T')[0];
+        }
+
+        function closeRequestModal() {
+            const modal = document.getElementById('requestModal');
+            modal.classList.remove('show');
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('pickupTime').value = `${hours}:${minutes}`;
+            
+            updateRateIndicator();
+            toggleVanBooking();
+            
+            // Initialize map
+            initMap();
+        });
+
+        // Handle form submission
+        document.getElementById('requestForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form values and create WhatsApp message
+            const tripDate = document.getElementById('tripDate').value;
+            const firstName = document.getElementById('firstName').value;
+            const lastName = document.getElementById('lastName').value;
+            const departurePoint = document.getElementById('departure').value;
+            const destinationPoint = document.getElementById('destination').value;
+            const flightFerry = document.getElementById('flightFerry').value;
+            const paymentMethod = document.getElementById('paymentMethod');
+            const paymentText = paymentMethod.options[paymentMethod.selectedIndex].text;
+            
+            let message = "*DEMANDE DE COURSE DRIVY*%0A%0A";
+            message += "*Client:* " + firstName + " " + lastName + "%0A";
+            message += "*Date:* " + new Date(tripDate).toLocaleDateString('fr-FR') + "%0A";
+            message += "*Heure:* " + document.getElementById('pickupTime').value + "%0A%0A";
+            message += "*Départ:* " + departurePoint + "%0A";
+            
+            // Add stops if any
+            const stopInputs = document.querySelectorAll('[id^="stop"]:not([id^="stopTime"])');
+            let stopNumber = 1;
+            stopInputs.forEach(input => {
+                if (input.value) {
+                    message += "*Arrêt " + stopNumber + ":* " + input.value + "%0A";
+                    stopNumber++;
+                }
+            });
+            
+            message += "*Destination:* " + destinationPoint + "%0A%0A";
+            
+            if (flightFerry.trim()) {
+                message += "*Vol/Ferry:* " + flightFerry + "%0A%0A";
+            }
+            
+            const passengers = document.getElementById('passengers').value;
+            message += "*Passagers:* " + passengers + "%0A";
+            
+            if (totalDistanceKm > 0) {
+                message += "*Distance:* " + totalDistanceKm.toFixed(1) + " km%0A";
+                message += "*Prix estimé:* " + (document.getElementById('totalPrice')?.textContent || '1000 XPF') + "%0A";
+            }
+            
+            message += "*Paiement:* " + paymentText + "%0A%0A";
+            message += "_Demande via Drivy Calculator_";
+            
+            const whatsappUrl = "https://wa.me/68989263268?text=" + message;
+            window.open(whatsappUrl, '_blank');
+            closeRequestModal();
+        });
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('requestModal');
+            if (event.target === modal) {
+                closeRequestModal();
+            }
+        }
+    </script>
+</body>
+</html>
