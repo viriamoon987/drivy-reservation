@@ -44,16 +44,29 @@
             gap: 12px;
         }
 
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
         .logo {
             width: 35px;
             height: 35px;
             border-radius: 50%;
+            overflow: hidden;
             background: #888;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
             font-size: 14px;
+        }
+
+        .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .title {
@@ -70,10 +83,45 @@
             font-size: 12px;
             cursor: pointer;
             transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .reset-btn:hover {
             background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+
+        .reset-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .language-toggle {
+            cursor: pointer;
+            transition: transform 0.2s;
+            width: 30px;
+            height: 20px;
+            border-radius: 3px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.3);
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #333;
+        }
+
+        .language-toggle:hover {
+            transform: scale(1.1);
+        }
+
+        .language-toggle img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .content {
@@ -237,17 +285,6 @@
             color: #1976d2;
         }
 
-        .time-row {
-            display: flex;
-            gap: 10px;
-            align-items: end;
-            margin-bottom: 15px;
-        }
-
-        .time-item {
-            flex: 1;
-        }
-
         .rate-indicator {
             display: flex;
             align-items: center;
@@ -403,52 +440,6 @@
             transform: translateY(-2px);
         }
 
-        .language-toggle {
-            cursor: pointer;
-            transition: transform 0.2s;
-            width: 30px;
-            height: 20px;
-            border-radius: 3px;
-            border: 1px solid rgba(255,255,255,0.3);
-            background: #f0f0f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            color: #333;
-        }
-
-        .language-toggle:hover {
-            transform: scale(1.1);
-        }
-
-        .autocomplete-suggestions {
-            position: absolute;
-            background: white;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            max-height: 200px;
-            overflow-y: auto;
-            z-index: 1000;
-            width: 100%;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .autocomplete-suggestion {
-            padding: 10px;
-            cursor: pointer;
-            border-bottom: 1px solid #f0f0f0;
-            font-size: 13px;
-        }
-
-        .autocomplete-suggestion:hover {
-            background: #f5f5f5;
-        }
-
-        .autocomplete-suggestion:last-child {
-            border-bottom: none;
-        }
-
         .modal {
             display: none;
             position: fixed;
@@ -581,6 +572,33 @@
         .name-row .modal-form-group {
             flex: 1;
         }
+
+        .autocomplete-suggestions {
+            position: absolute;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            width: 100%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .autocomplete-suggestion {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+
+        .autocomplete-suggestion:hover {
+            background: #f5f5f5;
+        }
+
+        .autocomplete-suggestion:last-child {
+            border-bottom: none;
+        }
     </style>
 </head>
 <body>
@@ -591,8 +609,15 @@
                 <h1 class="title" id="headerTitle">Calcule ton trajet</h1>
             </div>
             <div class="header-right">
-                <button class="reset-btn" onclick="resetForm()">↻</button>
-                <div class="language-toggle" onclick="toggleLanguage()" id="languageToggle">🇬🇧</div>
+                <button class="reset-btn" onclick="resetForm()">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 12C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C9.25022 4 6.82447 5.38734 5.38451 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M9 7.5L5.38451 7.5L5.38451 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <div class="language-toggle" onclick="toggleLanguage()" id="languageToggle">
+                    <img src="english.png" alt="English" id="flagImage">
+                </div>
             </div>
         </div>
 
@@ -629,19 +654,11 @@
             </div>
 
             <div class="form-group">
-                <div class="time-row">
-                    <div class="time-item">
-                        <label id="pickupTimeLabel">Heure de prise en charge</label>
-                        <input type="time" id="pickupTime" onchange="updateRateIndicator(); calculateFare()">
-                        <div class="rate-indicator">
-                            <span id="rateIcon">☀️</span>
-                            <span id="rateText">Tarif jour</span>
-                        </div>
-                    </div>
-                    <div class="time-item">
-                        <label id="trafficTimeLabel">Temps dans le trafic (min)</label>
-                        <input type="number" id="trafficTime" min="0" value="0" oninput="calculateFare()">
-                    </div>
+                <label id="pickupTimeLabel">Heure de prise en charge</label>
+                <input type="time" id="pickupTime" onchange="updateRateIndicator(); calculateFare()">
+                <div class="rate-indicator">
+                    <span id="rateIcon">☀️</span>
+                    <span id="rateText">Tarif jour</span>
                 </div>
             </div>
 
@@ -779,7 +796,6 @@
                 addStopText: "Ajouter un arrêt",
                 distanceLabel: "Distance totale",
                 pickupTimeLabel: "Heure de prise en charge",
-                trafficTimeLabel: "Temps dans le trafic (min)",
                 departureUpHighLabel: "Point de départ en hauteur",
                 destinationUpHighLabel: "Destination en hauteur",
                 passengersLabel: "👤 Nombre de passagers",
@@ -812,7 +828,6 @@
                 addStopText: "Add a stop",
                 distanceLabel: "Total distance",
                 pickupTimeLabel: "Pickup time",
-                trafficTimeLabel: "Traffic time (min)",
                 departureUpHighLabel: "Departure point up high",
                 destinationUpHighLabel: "Destination up high",
                 passengersLabel: "👤 Number of passengers",
@@ -884,10 +899,10 @@
         }
 
         function initGoogleMap() {
-            // Center on Tahiti
+            // Center on Tahiti Airport (Faaa)
             map = new google.maps.Map(document.getElementById('map'), {
-                center: { lat: -17.6509, lng: -149.4260 },
-                zoom: 11,
+                center: { lat: -17.5537, lng: -149.6070 },
+                zoom: 12,
                 styles: [
                     {
                         featureType: "poi",
@@ -952,23 +967,33 @@
                 isLocal: true
             }));
 
+            // Always show local results first
+            displaySuggestions(suggestions, suggestionsDiv, inputId);
+
             // Search with Google Places if autocompleteService is available
             if (autocompleteService) {
-                autocompleteService.getPlacePredictions({
+                const request = {
                     input: query,
-                    location: new google.maps.LatLng(-17.6509, -149.4260),
+                    location: new google.maps.LatLng(-17.5537, -149.6070), // Tahiti Airport
                     radius: 50000,
-                    componentRestrictions: { country: 'pf' }
-                }, (predictions, status) => {
-                    if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        const combinedResults = [...suggestions, ...predictions.slice(0, 5)];
+                    componentRestrictions: { country: 'pf' },
+                    types: ['establishment', 'geocode']
+                };
+
+                autocompleteService.getPlacePredictions(request, (predictions, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+                        // Filter out duplicates and combine results
+                        const filteredPredictions = predictions.filter(prediction => {
+                            return !suggestions.some(local => 
+                                prediction.description.toLowerCase().includes(local.description.toLowerCase()) ||
+                                local.description.toLowerCase().includes(prediction.description.toLowerCase())
+                            );
+                        });
+
+                        const combinedResults = [...suggestions, ...filteredPredictions.slice(0, 5)];
                         displaySuggestions(combinedResults.slice(0, 8), suggestionsDiv, inputId);
-                    } else {
-                        displaySuggestions(suggestions, suggestionsDiv, inputId);
                     }
                 });
-            } else {
-                displaySuggestions(suggestions, suggestionsDiv, inputId);
             }
         }
 
@@ -1013,17 +1038,32 @@
             suggestionsDiv.style.display = 'none';
             
             if (location.geometry && location.geometry.location) {
+                // Direct coordinates available
                 input.dataset.lat = location.geometry.location.lat;
                 input.dataset.lng = location.geometry.location.lng;
                 calculateRoute();
             } else if (location.place_id && placesService) {
+                // Need to get details from place_id
                 placesService.getDetails({
                     placeId: location.place_id,
-                    fields: ['geometry']
+                    fields: ['geometry', 'name']
                 }, (place, status) => {
                     if (status === google.maps.places.PlacesServiceStatus.OK) {
                         input.dataset.lat = place.geometry.location.lat();
                         input.dataset.lng = place.geometry.location.lng();
+                        calculateRoute();
+                    }
+                });
+            } else {
+                // Fallback: use geocoding service
+                const geocoder = new google.maps.Geocoder();
+                geocoder.geocode({ 
+                    address: location.description,
+                    componentRestrictions: { country: 'PF' }
+                }, (results, status) => {
+                    if (status === 'OK' && results[0]) {
+                        input.dataset.lat = results[0].geometry.location.lat();
+                        input.dataset.lng = results[0].geometry.location.lng();
                         calculateRoute();
                     }
                 });
@@ -1086,12 +1126,17 @@
         }
 
         function calculateRoute() {
-            if (!directionsService || !directionsRenderer) return;
+            if (!directionsService || !directionsRenderer) {
+                console.log('Services not ready');
+                return;
+            }
             
             const departureInput = document.getElementById('departure');
             const destinationInput = document.getElementById('destination');
             
-            if (!departureInput.dataset.lat || !destinationInput.dataset.lat) {
+            if (!departureInput.dataset.lat || !departureInput.dataset.lng || 
+                !destinationInput.dataset.lat || !destinationInput.dataset.lng) {
+                console.log('Missing coordinates');
                 return;
             }
             
@@ -1120,12 +1165,20 @@
                 }
             });
             
-            directionsService.route({
+            console.log('Calculating route from', origin.toString(), 'to', destination.toString());
+            
+            const request = {
                 origin: origin,
                 destination: destination,
                 waypoints: waypoints,
-                travelMode: google.maps.TravelMode.DRIVING
-            }, (result, status) => {
+                travelMode: google.maps.TravelMode.DRIVING,
+                unitSystem: google.maps.UnitSystem.METRIC,
+                avoidHighways: false,
+                avoidTolls: false
+            };
+            
+            directionsService.route(request, (result, status) => {
+                console.log('Route status:', status);
                 if (status === google.maps.DirectionsStatus.OK) {
                     directionsRenderer.setDirections(result);
                     
@@ -1133,9 +1186,12 @@
                     let totalDistance = 0;
                     result.routes[0].legs.forEach(leg => {
                         totalDistance += leg.distance.value;
+                        console.log('Leg distance:', leg.distance.text);
                     });
                     
                     totalDistanceKm = totalDistance / 1000;
+                    console.log('Total distance:', totalDistanceKm, 'km');
+                    
                     document.getElementById('totalDistance').textContent = totalDistanceKm.toFixed(1) + ' km';
                     document.getElementById('distanceDisplay').style.display = 'block';
                     
@@ -1148,6 +1204,9 @@
                     `;
                     
                     calculateFare();
+                } else {
+                    console.error('Directions request failed due to', status);
+                    alert('Impossible de calculer l\'itinéraire. Vérifiez les adresses saisies.');
                 }
             });
         }
@@ -1155,8 +1214,14 @@
         function toggleLanguage() {
             currentLang = currentLang === 'fr' ? 'en' : 'fr';
             
-            const languageToggle = document.getElementById('languageToggle');
-            languageToggle.textContent = currentLang === 'fr' ? '🇬🇧' : '🇫🇷';
+            const flagImage = document.getElementById('flagImage');
+            if (currentLang === 'fr') {
+                flagImage.src = 'english.png';
+                flagImage.alt = 'English';
+            } else {
+                flagImage.src = 'french.png';
+                flagImage.alt = 'Français';
+            }
             
             // Update all text elements
             Object.keys(translations[currentLang]).forEach(key => {
@@ -1225,17 +1290,14 @@
             const passengers = parseInt(document.getElementById('passengers').value || 1);
             if (passengers >= 5) total += 500;
             
-            // Waiting time at stops
+            // Waiting time at stops only
             let totalWaitingTime = 0;
             const stopTimeInputs = document.querySelectorAll('[id^="stopTime"]');
             stopTimeInputs.forEach(input => {
                 totalWaitingTime += parseInt(input.value || 0);
             });
             
-            // Traffic time
-            const trafficTime = parseInt(document.getElementById('trafficTime').value || 0);
-            const totalTime = totalWaitingTime + trafficTime;
-            if (totalTime > 0) total += totalTime * 42;
+            if (totalWaitingTime > 0) total += totalWaitingTime * 42;
             
             // Baggage
             const baggageChecked = parseInt(document.getElementById('baggageChecked').value || 0);
@@ -1306,7 +1368,6 @@
             document.getElementById('destination').value = '';
             document.getElementById('destination').removeAttribute('data-lat');
             document.getElementById('destination').removeAttribute('data-lng');
-            document.getElementById('trafficTime').value = '0';
             document.getElementById('baggageChecked').value = '0';
             document.getElementById('baggageCabin').value = '0';
             document.getElementById('baggageBags').value = '0';
