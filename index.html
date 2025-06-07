@@ -180,6 +180,7 @@
 
         .location-input input {
             padding-left: 30px;
+            padding-right: 45px;
         }
 
         .location-icon {
@@ -194,6 +195,34 @@
         .departure-icon { color: #4CAF50; }
         .stop-icon { color: #FF9800; }
         .destination-icon { color: #f44336; }
+
+        .map-pin-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .map-pin-btn:hover {
+            background: #3367D6;
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .map-pin-btn.active {
+            background: #FF9800;
+        }
 
         .add-stop-btn {
             background: #25D366;
@@ -585,6 +614,7 @@
             z-index: 1000;
             width: 100%;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            top: 100%;
         }
 
         .autocomplete-suggestion {
@@ -634,6 +664,7 @@
                 <div class="location-input">
                     <span class="location-icon departure-icon">●</span>
                     <input type="text" id="departure" placeholder="Point de départ">
+                    <button class="map-pin-btn" onclick="selectOnMap('departure')" title="Sélectionner sur la carte">📍</button>
                     <div id="departure-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
                 </div>
                 
@@ -647,6 +678,7 @@
                 <div class="location-input">
                     <span class="location-icon destination-icon">●</span>
                     <input type="text" id="destination" placeholder="Destination">
+                    <button class="map-pin-btn" onclick="selectOnMap('destination')" title="Sélectionner sur la carte">📍</button>
                     <div id="destination-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
                 </div>
             </div>
@@ -786,11 +818,11 @@
         let map;
         let directionsService;
         let directionsRenderer;
-        let markers = [];
-        let totalDistanceKm = 0;
-        let searchTimeout;
         let autocompleteService;
         let placesService;
+        let totalDistanceKm = 0;
+        let searchTimeout;
+        let selectingForInput = null;
 
         const translations = {
             fr: {
@@ -857,711 +889,3 @@
                 disclaimer: "This is a good estimate of the final price but the driver will use the taximeter for the exact fare",
                 vehicleNote: "For 1 vehicle"
             }
-        };
-
-        // Base de données des lieux principaux de Tahiti
-        const tahitiPlaces = [
-            { name: "Aéroport International de Tahiti-Faa'a", lat: -17.5537, lon: -149.6070 },
-            { name: "Port Autonome de Papeete", lat: -17.5335, lon: -149.5683 },
-            { name: "Marina Taina", lat: -17.5808, lon: -149.6209 },
-            { name: "InterContinental Tahiti Resort", lat: -17.5070, lon: -149.6039 },
-            { name: "Hilton Hotel Tahiti", lat: -17.5488, lon: -149.5654 },
-            { name: "Sofitel Tahiti Ia Ora Beach Resort", lat: -17.5510, lon: -149.5643 },
-            { name: "Carrefour Punaauia", lat: -17.5710, lon: -149.6095 },
-            { name: "Centre Vaima", lat: -17.5361, lon: -149.5672 },
-            { name: "Marché de Papeete", lat: -17.5337, lon: -149.5653 },
-            { name: "Université de la Polynésie française", lat: -17.5769, lon: -149.6121 },
-            { name: "Hôpital du Taaone", lat: -17.5542, lon: -149.5580 },
-            { name: "Musée de Tahiti et des Îles", lat: -17.6195, lon: -149.6147 },
-            { name: "Point Vénus", lat: -17.4974, lon: -149.4941 },
-            { name: "Centre-ville de Papeete", lat: -17.5351, lon: -149.5666 }
-        ];
-
-        async function getGoogleMapsApiKey() {
-            try {
-                // Essayer d'abord la fonction Netlify
-                const response = await fetch('/.netlify/functions/get-maps-key');
-                if (response.ok) {
-                    const data = await response.json();
-                    return data.apiKey;
-                }
-                throw new Error('Netlify function not available');
-            } catch (error) {
-                console.warn('Netlify function not available, using environment variable');
-                // Fallback : utiliser une variable d'environnement publique (temporaire)
-                // IMPORTANT: En production, utilisez toujours la fonction Netlify pour la sécurité
-                return window.GOOGLE_MAPS_API_KEY || null;
-            }
-        }
-
-        async function initMap() {
-            try {
-                const apiKey = await getGoogleMapsApiKey();
-                if (!apiKey) {
-                    throw new Error('No API key available');
-                }
-
-                // Load Google Maps API with async loading (best practice)
-                const script = document.createElement('script');
-                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
-                script.async = true;
-                script.defer = true;
-                script.onerror = () => {
-                    throw new Error('Failed to load Google Maps script');
-                };
-                
-                // Use callback instead of direct loading
-                window.initGoogleMapCallback = initGoogleMap;
-                script.src += '&callback=initGoogleMapCallback';
-                
-                document.head.appendChild(script);
-            } catch (error) {
-                console.error('Error initializing map:', error);
-                document.getElementById('map').innerHTML = 
-                    '<div style="padding: 20px; text-align: center; color: red;">Erreur de chargement de la carte. Vérifiez votre clé API Google Maps.</div>';
-            }
-        }
-
-        function initGoogleMap() {
-            // Center on Tahiti Airport (Faaa)
-            map = new google.maps.Map(document.getElementById('map'), {
-                center: { lat: -17.5537, lng: -149.6070 },
-                zoom: 12,
-                styles: [
-                    {
-                        featureType: "poi",
-                        elementType: "labels",
-                        stylers: [{ visibility: "off" }]
-                    }
-                ]
-            });
-
-            directionsService = new google.maps.DirectionsService();
-            directionsRenderer = new google.maps.DirectionsRenderer({
-                suppressMarkers: false,
-                polylineOptions: {
-                    strokeColor: '#4285F4',
-                    strokeWeight: 6,
-                    strokeOpacity: 0.8
-                }
-            });
-            directionsRenderer.setMap(map);
-
-            // Utiliser les nouvelles APIs 2025
-            setupNewAutocomplete('departure');
-            setupNewAutocomplete('destination');
-        }
-
-        // Nouvelle fonction avec AutocompleteSuggestion (API 2025)
-        async function setupNewAutocomplete(inputId) {
-            const input = document.getElementById(inputId);
-            const suggestionsDiv = document.getElementById(inputId + '-suggestions');
-            
-            input.addEventListener('input', async function() {
-                clearTimeout(searchTimeout);
-                const query = this.value;
-                
-                if (query.length < 2) {
-                    suggestionsDiv.style.display = 'none';
-                    return;
-                }
-                
-                searchTimeout = setTimeout(async () => {
-                    await searchWithNewAPI(query, inputId);
-                }, 300);
-            });
-            
-            document.addEventListener('click', function(e) {
-                if (!input.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-                    suggestionsDiv.style.display = 'none';
-                }
-            });
-        }
-
-        // Recherche avec la nouvelle API AutocompleteSuggestion
-        async function searchWithNewAPI(query, inputId) {
-            const suggestionsDiv = document.getElementById(inputId + '-suggestions');
-            
-            // Recherche locale d'abord
-            const localResults = searchLocalPlaces(query);
-            const localSuggestions = localResults.map(place => ({
-                description: place.name,
-                place_id: null,
-                geometry: { location: { lat: place.lat, lng: place.lon } },
-                isLocal: true
-            }));
-
-            try {
-                // Utiliser la nouvelle API AutocompleteSuggestion
-                if (google.maps.places && google.maps.places.AutocompleteSuggestion) {
-                    const request = {
-                        input: query,
-                        locationBias: new google.maps.LatLng(-17.5537, -149.6070),
-                        regionCode: 'pf',
-                        includedPrimaryTypes: ['establishment', 'point_of_interest'],
-                        maxResultCount: 5
-                    };
-
-                    const { suggestions } = await google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
-                    
-                    if (suggestions && suggestions.length > 0) {
-                        const googleSuggestions = suggestions.map(suggestion => ({
-                            description: suggestion.placePrediction.text.text,
-                            place_id: suggestion.placePrediction.placeId,
-                            structured_formatting: {
-                                main_text: suggestion.placePrediction.structuredFormat.mainText.text,
-                                secondary_text: suggestion.placePrediction.structuredFormat.secondaryText?.text || ''
-                            },
-                            isLocal: false
-                        }));
-
-                        const combinedResults = [...localSuggestions, ...googleSuggestions];
-                        displaySuggestions(combinedResults.slice(0, 8), suggestionsDiv, inputId);
-                    } else {
-                        displaySuggestions(localSuggestions, suggestionsDiv, inputId);
-                    }
-                } else {
-                    // Fallback si la nouvelle API n'est pas disponible
-                    displaySuggestions(localSuggestions, suggestionsDiv, inputId);
-                }
-            } catch (error) {
-                console.warn('Nouvelle API non disponible, utilisation des résultats locaux:', error);
-                displaySuggestions(localSuggestions, suggestionsDiv, inputId);
-            }
-        }
-
-        function searchLocalPlaces(query) {
-            const lowerQuery = query.toLowerCase();
-            return tahitiPlaces.filter(place => 
-                place.name.toLowerCase().includes(lowerQuery)
-            ).slice(0, 5);
-        }
-
-        function displaySuggestions(results, suggestionsDiv, inputId) {
-            if (results.length > 0) {
-                suggestionsDiv.innerHTML = '';
-                results.forEach(result => {
-                    const div = document.createElement('div');
-                    div.className = 'autocomplete-suggestion';
-                    
-                    let displayName = result.description || result.structured_formatting?.main_text || 'Location';
-                    if (result.isLocal) {
-                        displayName = '📍 ' + displayName;
-                    }
-                    
-                    div.textContent = displayName;
-                    div.onclick = function() {
-                        selectLocation(inputId, result);
-                    };
-                    suggestionsDiv.appendChild(div);
-                });
-                suggestionsDiv.style.display = 'block';
-            } else {
-                suggestionsDiv.innerHTML = 
-                    '<div class="autocomplete-suggestion" style="color: #999; font-style: italic;">Aucun résultat trouvé</div>';
-                suggestionsDiv.style.display = 'block';
-            }
-        }
-
-        async function selectLocation(inputId, location) {
-            const input = document.getElementById(inputId);
-            const suggestionsDiv = document.getElementById(inputId + '-suggestions');
-            
-            input.value = location.description || location.structured_formatting?.main_text || 'Location sélectionnée';
-            suggestionsDiv.style.display = 'none';
-            
-            if (location.geometry && location.geometry.location) {
-                // Direct coordinates available
-                input.dataset.lat = location.geometry.location.lat;
-                input.dataset.lng = location.geometry.location.lng;
-                calculateRoute();
-            } else if (location.place_id) {
-                try {
-                    // Utiliser la nouvelle API Place
-                    if (google.maps.places && google.maps.places.Place) {
-                        const place = new google.maps.places.Place({
-                            id: location.place_id,
-                            requestedLanguage: currentLang
-                        });
-
-                        await place.fetchFields({
-                            fields: ['location', 'displayName']
-                        });
-
-                        if (place.location) {
-                            input.dataset.lat = place.location.lat();
-                            input.dataset.lng = place.location.lng();
-                            calculateRoute();
-                        }
-                    } else {
-                        // Fallback vers l'ancienne API si la nouvelle n'est pas disponible
-                        const service = new google.maps.places.PlacesService(map);
-                        service.getDetails({
-                            placeId: location.place_id,
-                            fields: ['geometry', 'name']
-                        }, (place, status) => {
-                            if (status === google.maps.places.PlacesServiceStatus.OK) {
-                                input.dataset.lat = place.geometry.location.lat();
-                                input.dataset.lng = place.geometry.location.lng();
-                                calculateRoute();
-                            }
-                        });
-                    }
-                } catch (error) {
-                    console.warn('Erreur avec la nouvelle API Place, utilisation du fallback:', error);
-                    // Fallback: use geocoding service
-                    const geocoder = new google.maps.Geocoder();
-                    geocoder.geocode({ 
-                        address: location.description,
-                        componentRestrictions: { country: 'PF' }
-                    }, (results, status) => {
-                        if (status === 'OK' && results[0]) {
-                            input.dataset.lat = results[0].geometry.location.lat();
-                            input.dataset.lng = results[0].geometry.location.lng();
-                            calculateRoute();
-                        }
-                    });
-                }
-            } else {
-                // Fallback: use geocoding service
-                const geocoder = new google.maps.Geocoder();
-                geocoder.geocode({ 
-                    address: location.description,
-                    componentRestrictions: { country: 'PF' }
-                }, (results, status) => {
-                    if (status === 'OK' && results[0]) {
-                        input.dataset.lat = results[0].geometry.location.lat();
-                        input.dataset.lng = results[0].geometry.location.lng();
-                        calculateRoute();
-                    }
-                });
-            }
-        }
-
-        function addStop() {
-            const stopsContainer = document.getElementById('stopsContainer');
-            const stopIndex = stopsContainer.children.length;
-            
-            const stopDiv = document.createElement('div');
-            stopDiv.className = 'stop-container';
-            stopDiv.innerHTML = `
-                <div class="stop-row">
-                    <div class="stop-input-wrapper location-input">
-                        <span class="location-icon stop-icon">●</span>
-                        <input type="text" id="stop${stopIndex}" placeholder="${currentLang === 'fr' ? 'Arrêt' : 'Stop'} ${stopIndex + 1}">
-                        <div id="stop${stopIndex}-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
-                    </div>
-                    <div class="stop-time-wrapper">
-                        <label>${currentLang === 'fr' ? 'Temps d\'attente (min)' : 'Waiting time (min)'}</label>
-                        <input type="number" id="stopTime${stopIndex}" min="0" value="0" oninput="calculateFare()">
-                    </div>
-                    <button class="remove-stop-btn" onclick="removeStop(${stopIndex})">×</button>
-                </div>
-            `;
-            
-            stopsContainer.appendChild(stopDiv);
-            setupNewAutocomplete(`stop${stopIndex}`);
-        }
-
-        function removeStop(index) {
-            const stopsContainer = document.getElementById('stopsContainer');
-            const stopContainers = stopsContainer.querySelectorAll('.stop-container');
-            
-            if (stopContainers[index]) {
-                stopContainers[index].remove();
-                
-                // Reindex remaining stops
-                const remainingStops = stopsContainer.querySelectorAll('.stop-container');
-                remainingStops.forEach((stop, i) => {
-                    const input = stop.querySelector('input[id^="stop"]:not([id^="stopTime"])');
-                    const timeInput = stop.querySelector('input[id^="stopTime"]');
-                    const suggestionsDiv = stop.querySelector('.autocomplete-suggestions');
-                    
-                    input.id = `stop${i}`;
-                    input.placeholder = `${currentLang === 'fr' ? 'Arrêt' : 'Stop'} ${i + 1}`;
-                    
-                    timeInput.id = `stopTime${i}`;
-                    suggestionsDiv.id = `stop${i}-suggestions`;
-                    
-                    const removeBtn = stop.querySelector('.remove-stop-btn');
-                    removeBtn.setAttribute('onclick', `removeStop(${i})`);
-                    
-                    setupNewAutocomplete(`stop${i}`);
-                });
-                
-                calculateRoute();
-            }
-        }
-
-        function calculateRoute() {
-            if (!directionsService || !directionsRenderer) {
-                console.log('Services not ready');
-                return;
-            }
-            
-            const departureInput = document.getElementById('departure');
-            const destinationInput = document.getElementById('destination');
-            
-            if (!departureInput.dataset.lat || !departureInput.dataset.lng || 
-                !destinationInput.dataset.lat || !destinationInput.dataset.lng) {
-                console.log('Missing coordinates');
-                return;
-            }
-            
-            const origin = new google.maps.LatLng(
-                parseFloat(departureInput.dataset.lat),
-                parseFloat(departureInput.dataset.lng)
-            );
-            
-            const destination = new google.maps.LatLng(
-                parseFloat(destinationInput.dataset.lat),
-                parseFloat(destinationInput.dataset.lng)
-            );
-            
-            // Add waypoints for stops
-            const waypoints = [];
-            const stopInputs = document.querySelectorAll('[id^="stop"]:not([id^="stopTime"])');
-            stopInputs.forEach(input => {
-                if (input.dataset.lat && input.dataset.lng) {
-                    waypoints.push({
-                        location: new google.maps.LatLng(
-                            parseFloat(input.dataset.lat),
-                            parseFloat(input.dataset.lng)
-                        ),
-                        stopover: true
-                    });
-                }
-            });
-            
-            console.log('Calculating route from', origin.toString(), 'to', destination.toString());
-            
-            const request = {
-                origin: origin,
-                destination: destination,
-                waypoints: waypoints,
-                travelMode: google.maps.TravelMode.DRIVING,
-                unitSystem: google.maps.UnitSystem.METRIC,
-                avoidHighways: false,
-                avoidTolls: false
-            };
-            
-            directionsService.route(request, (result, status) => {
-                console.log('Route status:', status);
-                if (status === google.maps.DirectionsStatus.OK) {
-                    directionsRenderer.setDirections(result);
-                    
-                    // Calculate total distance
-                    let totalDistance = 0;
-                    result.routes[0].legs.forEach(leg => {
-                        totalDistance += leg.distance.value;
-                        console.log('Leg distance:', leg.distance.text);
-                    });
-                    
-                    totalDistanceKm = totalDistance / 1000;
-                    console.log('Total distance:', totalDistanceKm, 'km');
-                    
-                    document.getElementById('totalDistance').textContent = totalDistanceKm.toFixed(1) + ' km';
-                    document.getElementById('distanceDisplay').style.display = 'block';
-                    
-                    // Update fare display
-                    const fareContent = document.getElementById('fareContent');
-                    fareContent.innerHTML = `
-                        <div class="disclaimer">${translations[currentLang].disclaimer}</div>
-                        <div class="price" id="totalPrice">1000 XPF</div>
-                        <div class="vehicle-note">${translations[currentLang].vehicleNote}</div>
-                    `;
-                    
-                    calculateFare();
-                } else {
-                    console.error('Directions request failed due to', status);
-                    alert('Impossible de calculer l\'itinéraire. Vérifiez les adresses saisies.');
-                }
-            });
-        }
-
-        function toggleLanguage() {
-            currentLang = currentLang === 'fr' ? 'en' : 'fr';
-            
-            const flagImage = document.getElementById('flagImage');
-            if (currentLang === 'fr') {
-                flagImage.src = 'english.png';
-                flagImage.alt = 'English';
-            } else {
-                flagImage.src = 'french.png';
-                flagImage.alt = 'Français';
-            }
-            
-            // Update all text elements
-            Object.keys(translations[currentLang]).forEach(key => {
-                const element = document.getElementById(key);
-                if (element) {
-                    if (element.tagName === 'INPUT' && element.hasAttribute('placeholder')) {
-                        element.placeholder = translations[currentLang][key];
-                    } else {
-                        element.textContent = translations[currentLang][key];
-                    }
-                }
-            });
-            
-            updateRateIndicator();
-            
-            // Update fare display if route exists
-            if (totalDistanceKm > 0) {
-                const fareContent = document.getElementById('fareContent');
-                fareContent.innerHTML = `
-                    <div class="disclaimer">${translations[currentLang].disclaimer}</div>
-                    <div class="price" id="totalPrice">${document.getElementById('totalPrice')?.textContent || '1000 XPF'}</div>
-                    <div class="vehicle-note">${translations[currentLang].vehicleNote}</div>
-                `;
-                calculateFare();
-            }
-        }
-
-        function updateRateIndicator() {
-            const time = document.getElementById('pickupTime').value;
-            const rateIcon = document.getElementById('rateIcon');
-            const rateText = document.getElementById('rateText');
-            
-            if (time) {
-                const hour = parseInt(time.split(':')[0]);
-                const isDay = hour >= 6 && hour < 20;
-                
-                if (isDay) {
-                    rateIcon.textContent = '☀️';
-                    rateText.textContent = translations[currentLang].rateTextDay;
-                } else {
-                    rateIcon.textContent = '🌙';
-                    rateText.textContent = translations[currentLang].rateTextNight;
-                }
-            }
-        }
-
-        function calculateFare() {
-            if (totalDistanceKm === 0) return;
-            
-            let total = 1000; // Base fare
-            
-            // Distance cost
-            const time = document.getElementById('pickupTime').value;
-            let ratePerKm = 160;
-            
-            if (time) {
-                const hour = parseInt(time.split(':')[0]);
-                const isNight = hour < 6 || hour >= 20;
-                if (isNight) ratePerKm = 260;
-            }
-            
-            const distanceCost = Math.round(totalDistanceKm * ratePerKm);
-            total += distanceCost;
-            
-            // Additional costs
-            const passengers = parseInt(document.getElementById('passengers').value || 1);
-            if (passengers >= 5) total += 500;
-            
-            // Waiting time at stops only
-            let totalWaitingTime = 0;
-            const stopTimeInputs = document.querySelectorAll('[id^="stopTime"]');
-            stopTimeInputs.forEach(input => {
-                totalWaitingTime += parseInt(input.value || 0);
-            });
-            
-            if (totalWaitingTime > 0) total += totalWaitingTime * 42;
-            
-            // Baggage
-            const baggageChecked = parseInt(document.getElementById('baggageChecked').value || 0);
-            const baggageCabin = parseInt(document.getElementById('baggageCabin').value || 0);
-            const baggageBags = parseInt(document.getElementById('baggageBags').value || 0);
-            const totalBaggage = baggageChecked + baggageCabin + baggageBags;
-            if (totalBaggage > 0) total += totalBaggage * 100;
-            
-            // Bulky items
-            const bulkyItems = document.getElementById('bulkyItems').value;
-            if (bulkyItems === "1") total += 500;
-            else if (bulkyItems === "plus") total += 500;
-            
-            // Height surcharges
-            if (document.getElementById('departureUpHigh').checked) total += 500;
-            if (document.getElementById('destinationUpHigh').checked) total += 500;
-            
-            // Van booking
-            if (document.getElementById('vanBooking').checked) total += 500;
-            
-            const priceElement = document.getElementById('totalPrice');
-            if (priceElement) {
-                priceElement.textContent = `${total} XPF`;
-            }
-        }
-
-        function toggleVanBooking() {
-            const passengers = parseInt(document.getElementById('passengers').value);
-            const vanOption = document.getElementById('vanOption');
-            
-            if (passengers <= 2) {
-                vanOption.classList.add('show');
-            } else {
-                vanOption.classList.remove('show');
-                document.getElementById('vanBooking').checked = false;
-            }
-            
-            checkVehicleLimit();
-        }
-
-        function checkVehicleLimit() {
-            const baggageChecked = parseInt(document.getElementById('baggageChecked').value || 0);
-            const baggageCabin = parseInt(document.getElementById('baggageCabin').value || 0);
-            const bulkyItems = document.getElementById('bulkyItems').value;
-            const passengers = parseInt(document.getElementById('passengers').value || 1);
-            const vehicleWarning = document.getElementById('vehicleWarning');
-            
-            let needsAdditionalVehicle = false;
-            
-            // Check if additional vehicle needed
-            const totalBaggageEquiv = baggageChecked + (baggageCabin / 2);
-            if (totalBaggageEquiv > 8 || passengers > 8 || bulkyItems === "plus") {
-                needsAdditionalVehicle = true;
-            }
-            
-            if (needsAdditionalVehicle) {
-                vehicleWarning.classList.add('show');
-            } else {
-                vehicleWarning.classList.remove('show');
-            }
-        }
-
-        function resetForm() {
-            // Reset all form fields
-            document.getElementById('departure').value = '';
-            document.getElementById('departure').removeAttribute('data-lat');
-            document.getElementById('departure').removeAttribute('data-lng');
-            document.getElementById('destination').value = '';
-            document.getElementById('destination').removeAttribute('data-lat');
-            document.getElementById('destination').removeAttribute('data-lng');
-            document.getElementById('baggageChecked').value = '0';
-            document.getElementById('baggageCabin').value = '0';
-            document.getElementById('baggageBags').value = '0';
-            document.getElementById('passengers').value = '1';
-            document.getElementById('bulkyItems').value = '0';
-            document.getElementById('departureUpHigh').checked = false;
-            document.getElementById('destinationUpHigh').checked = false;
-            document.getElementById('vanBooking').checked = false;
-            
-            // Clear stops
-            document.getElementById('stopsContainer').innerHTML = '';
-            
-            // Clear route
-            if (directionsRenderer) {
-                directionsRenderer.setDirections({routes: []});
-            }
-            
-            // Reset distance and fare display
-            totalDistanceKm = 0;
-            document.getElementById('distanceDisplay').style.display = 'none';
-            
-            // Reset fare display
-            const fareContent = document.getElementById('fareContent');
-            fareContent.innerHTML = `<div class="route-prompt">${translations[currentLang].routePrompt}</div>`;
-            
-            // Set current time
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            document.getElementById('pickupTime').value = `${hours}:${minutes}`;
-            
-            // Hide warnings
-            document.getElementById('vanOption').classList.remove('show');
-            document.getElementById('vehicleWarning').classList.remove('show');
-            
-            updateRateIndicator();
-        }
-
-        function openRequestModal() {
-            const modal = document.getElementById('requestModal');
-            modal.classList.add('show');
-            
-            // Set default date to tomorrow
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            document.getElementById('tripDate').value = tomorrow.toISOString().split('T')[0];
-        }
-
-        function closeRequestModal() {
-            const modal = document.getElementById('requestModal');
-            modal.classList.remove('show');
-        }
-
-        // Initialize on page load
-        window.addEventListener('DOMContentLoaded', function() {
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            document.getElementById('pickupTime').value = `${hours}:${minutes}`;
-            
-            updateRateIndicator();
-            toggleVanBooking();
-            
-            // Initialize map
-            initMap();
-        });
-
-        // Handle form submission
-        document.getElementById('requestForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            // Get form values and create WhatsApp message
-            const tripDate = document.getElementById('tripDate').value;
-            const firstName = document.getElementById('firstName').value;
-            const lastName = document.getElementById('lastName').value;
-            const departurePoint = document.getElementById('departure').value;
-            const destinationPoint = document.getElementById('destination').value;
-            const flightFerry = document.getElementById('flightFerry').value;
-            const paymentMethod = document.getElementById('paymentMethod');
-            const paymentText = paymentMethod.options[paymentMethod.selectedIndex].text;
-            
-            let message = "*DEMANDE DE COURSE DRIVY*%0A%0A";
-            message += "*Client:* " + firstName + " " + lastName + "%0A";
-            message += "*Date:* " + new Date(tripDate).toLocaleDateString('fr-FR') + "%0A";
-            message += "*Heure:* " + document.getElementById('pickupTime').value + "%0A%0A";
-            message += "*Départ:* " + departurePoint + "%0A";
-            
-            // Add stops if any
-            const stopInputs = document.querySelectorAll('[id^="stop"]:not([id^="stopTime"])');
-            let stopNumber = 1;
-            stopInputs.forEach(input => {
-                if (input.value) {
-                    message += "*Arrêt " + stopNumber + ":* " + input.value + "%0A";
-                    stopNumber++;
-                }
-            });
-            
-            message += "*Destination:* " + destinationPoint + "%0A%0A";
-            
-            if (flightFerry.trim()) {
-                message += "*Vol/Ferry:* " + flightFerry + "%0A%0A";
-            }
-            
-            const passengers = document.getElementById('passengers').value;
-            message += "*Passagers:* " + passengers + "%0A";
-            
-            if (totalDistanceKm > 0) {
-                message += "*Distance:* " + totalDistanceKm.toFixed(1) + " km%0A";
-                message += "*Prix estimé:* " + (document.getElementById('totalPrice')?.textContent || '1000 XPF') + "%0A";
-            }
-            
-            message += "*Paiement:* " + paymentText + "%0A%0A";
-            message += "_Demande via Drivy Calculator_";
-            
-            const whatsappUrl = "https://wa.me/68989263268?text=" + message;
-            window.open(whatsappUrl, '_blank');
-            closeRequestModal();
-        });
-
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('requestModal');
-            if (event.target === modal) {
-                closeRequestModal();
-            }
-        }
-    </script>
-</body>
-</html>
