@@ -901,12 +901,19 @@
                     throw new Error('No API key available');
                 }
 
-                // Load Google Maps API
+                // Load Google Maps API with async loading (best practice)
                 const script = document.createElement('script');
-                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMap`;
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
+                script.async = true;
+                script.defer = true;
                 script.onerror = () => {
                     throw new Error('Failed to load Google Maps script');
                 };
+                
+                // Use callback instead of direct loading
+                window.initGoogleMapCallback = initGoogleMap;
+                script.src += '&callback=initGoogleMapCallback';
+                
                 document.head.appendChild(script);
             } catch (error) {
                 console.error('Error initializing map:', error);
@@ -940,18 +947,17 @@
             });
             directionsRenderer.setMap(map);
 
-            autocompleteService = new google.maps.places.AutocompleteService();
-            placesService = new google.maps.places.PlacesService(map);
-
-            setupAutocomplete('departure');
-            setupAutocomplete('destination');
+            // Utiliser les nouvelles APIs 2025
+            setupNewAutocomplete('departure');
+            setupNewAutocomplete('destination');
         }
 
-        function setupAutocomplete(inputId) {
+        // Nouvelle fonction avec AutocompleteSuggestion (API 2025)
+        async function setupNewAutocomplete(inputId) {
             const input = document.getElementById(inputId);
             const suggestionsDiv = document.getElementById(inputId + '-suggestions');
             
-            input.addEventListener('input', function() {
+            input.addEventListener('input', async function() {
                 clearTimeout(searchTimeout);
                 const query = this.value;
                 
@@ -960,8 +966,8 @@
                     return;
                 }
                 
-                searchTimeout = setTimeout(() => {
-                    searchLocation(query, inputId);
+                searchTimeout = setTimeout(async () => {
+                    await searchWithNewAPI(query, inputId);
                 }, 300);
             });
             
@@ -972,45 +978,55 @@
             });
         }
 
-        function searchLocation(query, inputId) {
+        // Recherche avec la nouvelle API AutocompleteSuggestion
+        async function searchWithNewAPI(query, inputId) {
             const suggestionsDiv = document.getElementById(inputId + '-suggestions');
             
-            // Search local places first
+            // Recherche locale d'abord
             const localResults = searchLocalPlaces(query);
-            const suggestions = localResults.map(place => ({
+            const localSuggestions = localResults.map(place => ({
                 description: place.name,
                 place_id: null,
                 geometry: { location: { lat: place.lat, lng: place.lon } },
                 isLocal: true
             }));
 
-            // Always show local results first
-            displaySuggestions(suggestions, suggestionsDiv, inputId);
+            try {
+                // Utiliser la nouvelle API AutocompleteSuggestion
+                if (google.maps.places && google.maps.places.AutocompleteSuggestion) {
+                    const request = {
+                        input: query,
+                        locationBias: new google.maps.LatLng(-17.5537, -149.6070),
+                        regionCode: 'pf',
+                        includedPrimaryTypes: ['establishment', 'point_of_interest'],
+                        maxResultCount: 5
+                    };
 
-            // Search with Google Places if autocompleteService is available
-            if (autocompleteService) {
-                const request = {
-                    input: query,
-                    location: new google.maps.LatLng(-17.5537, -149.6070), // Tahiti Airport
-                    radius: 50000,
-                    componentRestrictions: { country: 'pf' },
-                    types: ['establishment', 'geocode']
-                };
+                    const { suggestions } = await google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+                    
+                    if (suggestions && suggestions.length > 0) {
+                        const googleSuggestions = suggestions.map(suggestion => ({
+                            description: suggestion.placePrediction.text.text,
+                            place_id: suggestion.placePrediction.placeId,
+                            structured_formatting: {
+                                main_text: suggestion.placePrediction.structuredFormat.mainText.text,
+                                secondary_text: suggestion.placePrediction.structuredFormat.secondaryText?.text || ''
+                            },
+                            isLocal: false
+                        }));
 
-                autocompleteService.getPlacePredictions(request, (predictions, status) => {
-                    if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-                        // Filter out duplicates and combine results
-                        const filteredPredictions = predictions.filter(prediction => {
-                            return !suggestions.some(local => 
-                                prediction.description.toLowerCase().includes(local.description.toLowerCase()) ||
-                                local.description.toLowerCase().includes(prediction.description.toLowerCase())
-                            );
-                        });
-
-                        const combinedResults = [...suggestions, ...filteredPredictions.slice(0, 5)];
+                        const combinedResults = [...localSuggestions, ...googleSuggestions];
                         displaySuggestions(combinedResults.slice(0, 8), suggestionsDiv, inputId);
+                    } else {
+                        displaySuggestions(localSuggestions, suggestionsDiv, inputId);
                     }
-                });
+                } else {
+                    // Fallback si la nouvelle API n'est pas disponible
+                    displaySuggestions(localSuggestions, suggestionsDiv, inputId);
+                }
+            } catch (error) {
+                console.warn('Nouvelle API non disponible, utilisation des résultats locaux:', error);
+                displaySuggestions(localSuggestions, suggestionsDiv, inputId);
             }
         }
 
@@ -1047,7 +1063,7 @@
             }
         }
 
-        function selectLocation(inputId, location) {
+        async function selectLocation(inputId, location) {
             const input = document.getElementById(inputId);
             const suggestionsDiv = document.getElementById(inputId + '-suggestions');
             
@@ -1059,18 +1075,53 @@
                 input.dataset.lat = location.geometry.location.lat;
                 input.dataset.lng = location.geometry.location.lng;
                 calculateRoute();
-            } else if (location.place_id && placesService) {
-                // Need to get details from place_id
-                placesService.getDetails({
-                    placeId: location.place_id,
-                    fields: ['geometry', 'name']
-                }, (place, status) => {
-                    if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        input.dataset.lat = place.geometry.location.lat();
-                        input.dataset.lng = place.geometry.location.lng();
-                        calculateRoute();
+            } else if (location.place_id) {
+                try {
+                    // Utiliser la nouvelle API Place
+                    if (google.maps.places && google.maps.places.Place) {
+                        const place = new google.maps.places.Place({
+                            id: location.place_id,
+                            requestedLanguage: currentLang
+                        });
+
+                        await place.fetchFields({
+                            fields: ['location', 'displayName']
+                        });
+
+                        if (place.location) {
+                            input.dataset.lat = place.location.lat();
+                            input.dataset.lng = place.location.lng();
+                            calculateRoute();
+                        }
+                    } else {
+                        // Fallback vers l'ancienne API si la nouvelle n'est pas disponible
+                        const service = new google.maps.places.PlacesService(map);
+                        service.getDetails({
+                            placeId: location.place_id,
+                            fields: ['geometry', 'name']
+                        }, (place, status) => {
+                            if (status === google.maps.places.PlacesServiceStatus.OK) {
+                                input.dataset.lat = place.geometry.location.lat();
+                                input.dataset.lng = place.geometry.location.lng();
+                                calculateRoute();
+                            }
+                        });
                     }
-                });
+                } catch (error) {
+                    console.warn('Erreur avec la nouvelle API Place, utilisation du fallback:', error);
+                    // Fallback: use geocoding service
+                    const geocoder = new google.maps.Geocoder();
+                    geocoder.geocode({ 
+                        address: location.description,
+                        componentRestrictions: { country: 'PF' }
+                    }, (results, status) => {
+                        if (status === 'OK' && results[0]) {
+                            input.dataset.lat = results[0].geometry.location.lat();
+                            input.dataset.lng = results[0].geometry.location.lng();
+                            calculateRoute();
+                        }
+                    });
+                }
             } else {
                 // Fallback: use geocoding service
                 const geocoder = new google.maps.Geocoder();
@@ -1109,7 +1160,7 @@
             `;
             
             stopsContainer.appendChild(stopDiv);
-            setupAutocomplete(`stop${stopIndex}`);
+            setupNewAutocomplete(`stop${stopIndex}`);
         }
 
         function removeStop(index) {
@@ -1135,7 +1186,7 @@
                     const removeBtn = stop.querySelector('.remove-stop-btn');
                     removeBtn.setAttribute('onclick', `removeStop(${i})`);
                     
-                    setupAutocomplete(`stop${i}`);
+                    setupNewAutocomplete(`stop${i}`);
                 });
                 
                 calculateRoute();
