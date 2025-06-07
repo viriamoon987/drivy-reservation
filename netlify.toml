@@ -1,0 +1,31 @@
+[build]
+  # Dossier de publication (où se trouve votre HTML)
+  publish = "."
+  
+  # Commande de build (si vous en avez une, sinon laissez vide)
+  command = ""
+
+[functions]
+  # Dossier contenant vos fonctions Netlify
+  directory = "netlify/functions"
+
+[[headers]]
+  # Headers de sécurité pour toutes les pages
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+[[headers]]
+  # Headers spécifiques pour les fonctions API
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+
+# Variables d'environnement (à configurer dans l'interface Netlify)
+# GOOGLE_MAPS_API_KEY = "votre_clé_api_google_maps"
