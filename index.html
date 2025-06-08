@@ -222,6 +222,13 @@
 
         .map-pin-btn.active {
             background: #FF9800;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
         }
 
         .add-stop-btn {
@@ -615,6 +622,8 @@
             width: 100%;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             top: 100%;
+            margin-top: 2px;
+            display: none;
         }
 
         .autocomplete-suggestion {
@@ -631,6 +640,24 @@
         .autocomplete-suggestion:last-child {
             border-bottom: none;
         }
+
+        .map-click-instruction {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            font-size: 14px;
+            display: none;
+        }
+
+        .map-click-instruction.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -638,7 +665,7 @@
         <div class="header">
             <div class="header-left">
                 <div class="logo">
-                    <img src="drivy.png" alt="Drivy Logo">
+                    <img src="drivy.png" alt="Drivy Logo" onerror="this.style.display='none'">
                 </div>
                 <h1 class="title" id="headerTitle">Calcule ton trajet</h1>
             </div>
@@ -650,22 +677,27 @@
                     </svg>
                 </button>
                 <div class="language-toggle" onclick="toggleLanguage()" id="languageToggle">
-                    <img src="english.png" alt="English" id="flagImage">
+                    <span id="flagEmoji">🇬🇧</span>
                 </div>
             </div>
         </div>
 
         <div class="content">
             <!-- Google Map -->
-            <div id="map"></div>
+            <div style="position: relative;">
+                <div id="map"></div>
+                <div class="map-click-instruction" id="mapInstruction">
+                    <span id="mapInstructionText">Cliquez sur la carte pour sélectionner</span>
+                </div>
+            </div>
 
             <!-- Location Inputs -->
             <div class="location-inputs">
                 <div class="location-input">
                     <span class="location-icon departure-icon">●</span>
-                    <input type="text" id="departure" placeholder="Point de départ">
+                    <input type="text" id="departure" placeholder="Point de départ" autocomplete="off">
                     <button class="map-pin-btn" onclick="selectOnMap('departure')" title="Sélectionner sur la carte">📍</button>
-                    <div id="departure-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
+                    <div id="departure-suggestions" class="autocomplete-suggestions"></div>
                 </div>
                 
                 <div id="stopsContainer"></div>
@@ -677,9 +709,9 @@
                 
                 <div class="location-input">
                     <span class="location-icon destination-icon">●</span>
-                    <input type="text" id="destination" placeholder="Destination">
+                    <input type="text" id="destination" placeholder="Destination" autocomplete="off">
                     <button class="map-pin-btn" onclick="selectOnMap('destination')" title="Sélectionner sur la carte">📍</button>
-                    <div id="destination-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
+                    <div id="destination-suggestions" class="autocomplete-suggestions"></div>
                 </div>
             </div>
 
@@ -814,17 +846,20 @@
     </div>
 
     <script>
+        // Variables globales
         let currentLang = 'fr';
         let map;
         let directionsService;
         let directionsRenderer;
         let autocompleteService;
         let placesService;
+        let geocoder;
         let totalDistanceKm = 0;
         let searchTimeout;
         let selectingForInput = null;
         let stops = [];
-        let googleMapsKey = null;
+        let markers = [];
+        let currentLocationMarker = null;
 
         const translations = {
             fr: {
@@ -859,7 +894,8 @@
                 disclaimer: "C'est une bonne estimation du prix final mais le chauffeur utilisera le taximètre pour avoir le tarif exacte",
                 vehicleNote: "Pour 1 véhicule",
                 stopLabel: "Arrêt",
-                stopTimeLabel: "Durée d'arrêt (min)"
+                stopTimeLabel: "Durée d'arrêt (min)",
+                mapInstructionText: "Cliquez sur la carte pour sélectionner"
             },
             en: {
                 headerTitle: "Calculate your trip",
@@ -893,37 +929,34 @@
                 disclaimer: "This is a good estimate of the final price but the driver will use the taximeter for the exact fare",
                 vehicleNote: "For 1 vehicle",
                 stopLabel: "Stop",
-                stopTimeLabel: "Stop duration (min)"
+                stopTimeLabel: "Stop duration (min)",
+                mapInstructionText: "Click on the map to select"
             }
         };
 
-        // Fonction pour charger la clé API Google Maps
-        async function loadGoogleMapsKey() {
+        // Charger Google Maps avec la fonction netlify
+        async function loadGoogleMaps() {
             try {
                 const response = await fetch('/.netlify/functions/get-maps-key');
                 const data = await response.json();
                 if (data.key) {
-                    googleMapsKey = data.key;
-                    loadGoogleMapsScript();
+                    const script = document.createElement('script');
+                    script.src = `https://maps.googleapis.com/maps/api/js?key=${data.key}&libraries=places&callback=initMap`;
+                    script.async = true;
+                    script.defer = true;
+                    document.head.appendChild(script);
                 } else {
                     console.error('Impossible de charger la clé Google Maps');
+                    // Fallback: essayer avec une clé par défaut ou afficher un message d'erreur
                 }
             } catch (error) {
                 console.error('Erreur lors du chargement de la clé:', error);
+                // Fallback
             }
         }
 
-        // Fonction pour charger le script Google Maps
-        function loadGoogleMapsScript() {
-            const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsKey}&libraries=places&callback=initMap`;
-            script.async = true;
-            script.defer = true;
-            document.head.appendChild(script);
-        }
-
-        // Initialisation de la carte Google Maps
-        function initMap() {
+        // Initialisation de Google Maps
+        window.initMap = function() {
             // Centre sur Tahiti
             const tahitiCenter = { lat: -17.5516, lng: -149.5585 };
             
@@ -932,17 +965,24 @@
                 center: tahitiCenter,
                 mapTypeControl: false,
                 streetViewControl: false,
-                fullscreenControl: false
+                fullscreenControl: false,
+                clickableIcons: false
             });
 
+            // Initialiser les services Google Maps
             directionsService = new google.maps.DirectionsService();
             directionsRenderer = new google.maps.DirectionsRenderer({
                 map: map,
-                suppressMarkers: false
+                suppressMarkers: true,
+                polylineOptions: {
+                    strokeColor: '#4285F4',
+                    strokeWeight: 4
+                }
             });
 
             autocompleteService = new google.maps.places.AutocompleteService();
             placesService = new google.maps.places.PlacesService(map);
+            geocoder = new google.maps.Geocoder();
 
             // Configuration des listeners pour les champs de recherche
             setupLocationInput('departure');
@@ -951,9 +991,50 @@
             // Listener pour clic sur la carte
             map.addListener('click', (event) => {
                 if (selectingForInput) {
-                    getAddressFromCoordinates(event.latLng, selectingForInput);
+                    handleMapClick(event.latLng);
                 }
             });
+
+            // Essayer d'obtenir la position actuelle
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        
+                        // Créer un marqueur pour la position actuelle
+                        currentLocationMarker = new google.maps.Marker({
+                            position: userLocation,
+                            map: map,
+                            icon: {
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: '#4285F4',
+                                fillOpacity: 1,
+                                strokeColor: '#ffffff',
+                                strokeWeight: 2
+                            },
+                            title: 'Votre position'
+                        });
+
+                        // Centrer la carte sur la position de l'utilisateur si c'est à Tahiti
+                        const bounds = new google.maps.LatLngBounds(
+                            new google.maps.LatLng(-17.9, -150.0),
+                            new google.maps.LatLng(-17.2, -149.1)
+                        );
+                        
+                        if (bounds.contains(userLocation)) {
+                            map.setCenter(userLocation);
+                            map.setZoom(13);
+                        }
+                    },
+                    (error) => {
+                        console.log('Géolocalisation non disponible');
+                    }
+                );
+            }
         }
 
         // Configuration des champs de saisie d'adresse
@@ -961,11 +1042,11 @@
             const input = document.getElementById(inputId);
             const suggestionsDiv = document.getElementById(`${inputId}-suggestions`);
 
-            input.addEventListener('input', () => {
+            input.addEventListener('input', function() {
                 clearTimeout(searchTimeout);
-                const value = input.value;
+                const value = this.value;
 
-                if (value.length < 3) {
+                if (value.length < 2) {
                     suggestionsDiv.style.display = 'none';
                     return;
                 }
@@ -975,9 +1056,9 @@
                 }, 300);
             });
 
-            input.addEventListener('focus', () => {
-                if (input.value.length >= 3) {
-                    searchPlaces(input.value, inputId);
+            input.addEventListener('focus', function() {
+                if (this.value.length >= 2) {
+                    searchPlaces(this.value, inputId);
                 }
             });
 
@@ -994,11 +1075,11 @@
             const input = document.getElementById(`stop-${stopIndex}`);
             const suggestionsDiv = document.getElementById(`stop-${stopIndex}-suggestions`);
 
-            input.addEventListener('input', () => {
+            input.addEventListener('input', function() {
                 clearTimeout(searchTimeout);
-                const value = input.value;
+                const value = this.value;
 
-                if (value.length < 3) {
+                if (value.length < 2) {
                     suggestionsDiv.style.display = 'none';
                     return;
                 }
@@ -1008,13 +1089,12 @@
                 }, 300);
             });
 
-            input.addEventListener('focus', () => {
-                if (input.value.length >= 3) {
-                    searchPlaces(input.value, `stop-${stopIndex}`);
+            input.addEventListener('focus', function() {
+                if (this.value.length >= 2) {
+                    searchPlaces(this.value, `stop-${stopIndex}`);
                 }
             });
 
-            // Fermer les suggestions quand on clique ailleurs
             document.addEventListener('click', (e) => {
                 if (!input.contains(e.target) && !suggestionsDiv.contains(e.target)) {
                     suggestionsDiv.style.display = 'none';
@@ -1022,20 +1102,38 @@
             });
         }
 
-        // Recherche de lieux avec Google Places
+        // Recherche de lieux
         function searchPlaces(query, inputId) {
+            if (!autocompleteService) return;
+
             const request = {
-                input: query,
+                input: query + ' Tahiti',
                 bounds: new google.maps.LatLngBounds(
                     new google.maps.LatLng(-17.9, -150.0),
                     new google.maps.LatLng(-17.2, -149.1)
                 ),
-                componentRestrictions: { country: 'pf' }
+                componentRestrictions: { country: 'pf' },
+                types: ['geocode', 'establishment']
             };
 
-            autocompleteService.getPlacePredictions(request, (results, status) => {
-                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-                    displaySuggestions(results, inputId);
+            autocompleteService.getPlacePredictions(request, (predictions, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+                    displaySuggestions(predictions, inputId);
+                } else {
+                    // Si pas de résultats, essayer sans restrictions
+                    const fallbackRequest = {
+                        input: query,
+                        bounds: new google.maps.LatLngBounds(
+                            new google.maps.LatLng(-17.9, -150.0),
+                            new google.maps.LatLng(-17.2, -149.1)
+                        )
+                    };
+                    
+                    autocompleteService.getPlacePredictions(fallbackRequest, (predictions2, status2) => {
+                        if (status2 === google.maps.places.PlacesServiceStatus.OK && predictions2) {
+                            displaySuggestions(predictions2, inputId);
+                        }
+                    });
                 }
             });
         }
@@ -1082,39 +1180,57 @@
                 btn.classList.remove('active');
             });
             
-            if (inputId.startsWith('stop-')) {
-                document.querySelector(`#stop-${inputId.split('-')[1]}`).nextElementSibling.classList.add('active');
-            } else {
-                document.querySelector(`#${inputId}`).nextElementSibling.classList.add('active');
-            }
+            // Activer le bouton cliqué
+            const btn = document.querySelector(`#${inputId}`).nextElementSibling;
+            btn.classList.add('active');
+            
+            // Afficher l'instruction
+            document.getElementById('mapInstruction').classList.add('show');
+            
+            // Changer le curseur de la carte
+            map.setOptions({ draggableCursor: 'crosshair' });
         }
 
-        // Obtenir l'adresse à partir des coordonnées
-        function getAddressFromCoordinates(latLng, inputId) {
-            const geocoder = new google.maps.Geocoder();
-            
+        // Gérer le clic sur la carte
+        function handleMapClick(latLng) {
+            if (!selectingForInput) return;
+
             geocoder.geocode({ location: latLng }, (results, status) => {
                 if (status === 'OK' && results[0]) {
-                    const input = document.getElementById(inputId);
+                    const input = document.getElementById(selectingForInput);
                     input.value = results[0].formatted_address;
                     
                     // Mettre à jour l'objet stops si c'est un arrêt
-                    if (inputId.startsWith('stop-')) {
-                        const stopIndex = parseInt(inputId.split('-')[1]);
+                    if (selectingForInput.startsWith('stop-')) {
+                        const stopIndex = parseInt(selectingForInput.split('-')[1]);
                         if (stops[stopIndex]) {
                             stops[stopIndex].address = results[0].formatted_address;
                         }
                     }
                     
-                    calculateRoute();
-                    
-                    // Réinitialiser la sélection
-                    selectingForInput = null;
-                    document.querySelectorAll('.map-pin-btn').forEach(btn => {
-                        btn.classList.remove('active');
+                    // Créer un marqueur temporaire
+                    const marker = new google.maps.Marker({
+                        position: latLng,
+                        map: map,
+                        animation: google.maps.Animation.DROP
                     });
+                    
+                    markers.push(marker);
+                    
+                    calculateRoute();
+                    resetMapSelection();
                 }
             });
+        }
+
+        // Réinitialiser la sélection sur carte
+        function resetMapSelection() {
+            selectingForInput = null;
+            document.querySelectorAll('.map-pin-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById('mapInstruction').classList.remove('show');
+            map.setOptions({ draggableCursor: null });
         }
 
         // Ajouter un arrêt
@@ -1132,9 +1248,9 @@
                     <div class="stop-input-wrapper">
                         <div class="location-input">
                             <span class="location-icon stop-icon">●</span>
-                            <input type="text" id="stop-${stopIndex}" placeholder="${translations[currentLang].stopLabel} ${stopIndex + 1}">
+                            <input type="text" id="stop-${stopIndex}" placeholder="${translations[currentLang].stopLabel} ${stopIndex + 1}" autocomplete="off">
                             <button class="map-pin-btn" onclick="selectOnMap('stop-${stopIndex}')" title="Sélectionner sur la carte">📍</button>
-                            <div id="stop-${stopIndex}-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
+                            <div id="stop-${stopIndex}-suggestions" class="autocomplete-suggestions"></div>
                         </div>
                     </div>
                     <div class="stop-time-wrapper">
@@ -1183,7 +1299,11 @@
             const departure = document.getElementById('departure').value;
             const destination = document.getElementById('destination').value;
             
-            if (!departure || !destination) return;
+            if (!departure || !destination || !directionsService) return;
+            
+            // Effacer les marqueurs précédents
+            markers.forEach(marker => marker.setMap(null));
+            markers = [];
             
             // Construire les waypoints
             const waypoints = stops
@@ -1216,7 +1336,59 @@
                     document.getElementById('totalDistance').textContent = totalDistanceKm.toFixed(1) + ' km';
                     document.getElementById('distanceDisplay').style.display = 'block';
                     
+                    // Ajouter des marqueurs personnalisés
+                    const route = result.routes[0];
+                    
+                    // Marqueur de départ
+                    new google.maps.Marker({
+                        position: route.legs[0].start_location,
+                        map: map,
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: '#4CAF50',
+                            fillOpacity: 1,
+                            strokeColor: '#ffffff',
+                            strokeWeight: 2
+                        },
+                        title: 'Départ'
+                    });
+                    
+                    // Marqueurs des arrêts
+                    for (let i = 0; i < waypoints.length; i++) {
+                        new google.maps.Marker({
+                            position: route.legs[i].end_location,
+                            map: map,
+                            icon: {
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: '#FF9800',
+                                fillOpacity: 1,
+                                strokeColor: '#ffffff',
+                                strokeWeight: 2
+                            },
+                            title: `Arrêt ${i + 1}`
+                        });
+                    }
+                    
+                    // Marqueur de destination
+                    new google.maps.Marker({
+                        position: route.legs[route.legs.length - 1].end_location,
+                        map: map,
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: '#f44336',
+                            fillOpacity: 1,
+                            strokeColor: '#ffffff',
+                            strokeWeight: 2
+                        },
+                        title: 'Destination'
+                    });
+                    
                     calculateFare();
+                } else {
+                    console.error('Erreur de calcul d\'itinéraire:', status);
                 }
             });
         }
@@ -1334,6 +1506,7 @@
         function updateLanguage() {
             const t = translations[currentLang];
             
+            // Mettre à jour tous les textes
             document.getElementById('headerTitle').textContent = t.headerTitle;
             document.getElementById('departure').placeholder = t.departurePoint;
             document.getElementById('destination').placeholder = t.destination;
@@ -1360,19 +1533,22 @@
             document.getElementById('paymentMethodLabel').textContent = t.paymentMethodLabel;
             document.getElementById('cancelBtn').textContent = t.cancelBtn;
             document.getElementById('sendBtn').textContent = t.sendBtn;
+            document.getElementById('mapInstructionText').textContent = t.mapInstructionText;
             
             updateRateIndicator();
             
             // Mettre à jour le drapeau
-            const flagImage = document.getElementById('flagImage');
-            flagImage.src = currentLang === 'fr' ? 'english.png' : 'french.png';
-            flagImage.alt = currentLang === 'fr' ? 'English' : 'Français';
+            document.getElementById('flagEmoji').textContent = currentLang === 'fr' ? '🇬🇧' : '🇫🇷';
             
             // Mettre à jour les arrêts existants
             stops.forEach((stop, i) => {
                 const input = document.getElementById(`stop-${i}`);
                 if (input) {
                     input.placeholder = `${t.stopLabel} ${i + 1}`;
+                }
+                const label = document.querySelector(`#stop-container-${i} .stop-time-wrapper label`);
+                if (label) {
+                    label.textContent = t.stopTimeLabel;
                 }
             });
             
@@ -1381,6 +1557,7 @@
 
         // Réinitialiser le formulaire
         function resetForm() {
+            // Réinitialiser tous les champs
             document.getElementById('departure').value = '';
             document.getElementById('destination').value = '';
             document.getElementById('pickupTime').value = '';
@@ -1408,12 +1585,24 @@
                 directionsRenderer.setDirections({ routes: [] });
             }
             
+            // Effacer les marqueurs
+            markers.forEach(marker => marker.setMap(null));
+            markers = [];
+            
             totalDistanceKm = 0;
             updateRateIndicator();
+            resetMapSelection();
         }
 
         // Ouvrir le modal de demande
         function openRequestModal() {
+            if (totalDistanceKm === 0) {
+                alert(currentLang === 'fr' ? 
+                    'Veuillez d\'abord entrer un itinéraire' : 
+                    'Please enter a route first');
+                return;
+            }
+            
             document.getElementById('requestModal').classList.add('show');
             
             // Définir la date par défaut à aujourd'hui
@@ -1424,6 +1613,14 @@
         // Fermer le modal
         function closeRequestModal() {
             document.getElementById('requestModal').classList.remove('show');
+        }
+
+        // Fermer le modal en cliquant à l'extérieur
+        window.onclick = function(event) {
+            const modal = document.getElementById('requestModal');
+            if (event.target == modal) {
+                closeRequestModal();
+            }
         }
 
         // Gérer la soumission du formulaire
@@ -1515,8 +1712,8 @@
             closeRequestModal();
         });
 
-        // Charger la clé API et initialiser Google Maps au chargement de la page
-        window.addEventListener('load', loadGoogleMapsKey);
+        // Charger Google Maps au chargement de la page
+        window.addEventListener('load', loadGoogleMaps);
     </script>
 </body>
 </html>
