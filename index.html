@@ -207,6 +207,7 @@
             align-items: center;
             justify-content: center;
             transition: all 0.2s ease;
+            z-index: 2;
         }
 
         .map-pin-btn:hover {
@@ -622,24 +623,6 @@
         .map-click-instruction.show {
             display: block;
         }
-
-        .loading-spinner {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            100% { transform: translate(-50%, -50%) rotate(360deg); }
-        }
     </style>
 </head>
 <body>
@@ -667,9 +650,7 @@
         <div class="content">
             <!-- Google Map -->
             <div style="position: relative;">
-                <div id="map">
-                    <div class="loading-spinner"></div>
-                </div>
+                <div id="map"></div>
                 <div class="map-click-instruction" id="mapInstruction">
                     <span id="mapInstructionText">Cliquez sur la carte pour sélectionner</span>
                 </div>
@@ -830,17 +811,13 @@
     <script>
         // Variables globales
         let currentLang = 'fr';
-        let map;
-        let directionsService;
-        let directionsRenderer;
-        let geocoder;
+        let map, directionsService, directionsRenderer;
+        let departureMarker = null, destinationMarker = null;
+        let stopMarkers = [];
         let totalDistanceKm = 0;
         let selectingForInput = null;
         let stops = [];
-        let markers = [];
-        let currentLocationMarker = null;
-        let placeAutocomplete = {};
-        let sessionToken;
+        let autocompletes = {};
 
         const translations = {
             fr: {
@@ -876,7 +853,9 @@
                 vehicleNote: "Pour 1 véhicule",
                 stopLabel: "Arrêt",
                 stopTimeLabel: "Durée d'arrêt (min)",
-                mapInstructionText: "Cliquez sur la carte pour sélectionner"
+                mapInstructionText: "Cliquez sur la carte pour sélectionner",
+                setPoints: "Veuillez définir le départ et la destination",
+                couldNotCalc: "Impossible de calculer l'itinéraire"
             },
             en: {
                 headerTitle: "Calculate your trip",
@@ -911,35 +890,83 @@
                 vehicleNote: "For 1 vehicle",
                 stopLabel: "Stop",
                 stopTimeLabel: "Stop duration (min)",
-                mapInstructionText: "Click on the map to select"
+                mapInstructionText: "Click on the map to select",
+                setPoints: "Please set pickup and destination",
+                couldNotCalc: "Could not calculate route"
             }
         };
 
-        // Initialiser Google Maps avec le nouveau système de chargement
-        async function initMap() {
-            // Importer les bibliothèques nécessaires
-            const { Map } = await google.maps.importLibrary("maps");
-            const { DirectionsService, DirectionsRenderer } = await google.maps.importLibrary("routes");
-            const { PlaceAutocompleteElement, Place } = await google.maps.importLibrary("places");
-            const { Geocoder } = await google.maps.importLibrary("geocoding");
-            const { Marker } = await google.maps.importLibrary("marker");
-
-            // Centre sur Tahiti
-            const tahitiCenter = { lat: -17.5516, lng: -149.5585 };
-            
-            // Créer la carte
-            map = new Map(document.getElementById('map'), {
-                zoom: 11,
-                center: tahitiCenter,
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: false,
-                clickableIcons: false
+        // Fonction de définition du départ
+        function setDeparture(latlng, address) {
+            if (departureMarker) departureMarker.setMap(null);
+            departureMarker = new google.maps.Marker({ 
+                position: latlng, 
+                map: map, 
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: '#4CAF50',
+                    fillOpacity: 1,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 2
+                },
+                title: 'Départ'
             });
+            document.getElementById('departure').value = address || '';
+            if (destinationMarker) drawRoute();
+        }
 
-            // Initialiser les services
-            directionsService = new DirectionsService();
-            directionsRenderer = new DirectionsRenderer({
+        // Fonction de définition de la destination
+        function setDestination(latlng, address) {
+            if (destinationMarker) destinationMarker.setMap(null);
+            destinationMarker = new google.maps.Marker({ 
+                position: latlng, 
+                map: map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: '#f44336',
+                    fillOpacity: 1,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 2
+                },
+                title: 'Destination'
+            });
+            document.getElementById('destination').value = address || '';
+            if (departureMarker) drawRoute();
+        }
+
+        // Fonction de définition d'un arrêt
+        function setStop(index, latlng, address) {
+            if (stopMarkers[index]) stopMarkers[index].setMap(null);
+            stopMarkers[index] = new google.maps.Marker({
+                position: latlng,
+                map: map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: '#FF9800',
+                    fillOpacity: 1,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 2
+                },
+                title: `Arrêt ${index + 1}`
+            });
+            document.getElementById(`stop-${index}`).value = address || '';
+            stops[index].address = address || '';
+            stops[index].location = latlng;
+            if (departureMarker && destinationMarker) drawRoute();
+        }
+
+        // Initialisation de Google Maps
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: -17.5516, lng: -149.5585 },
+                zoom: 11
+            });
+            
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer({ 
                 map: map,
                 suppressMarkers: true,
                 polylineOptions: {
@@ -948,124 +975,116 @@
                 }
             });
 
-            geocoder = new Geocoder();
+            // Centre de Tahiti et cercle pour le biais de localisation
+            const tahiti = { lat: -17.5516, lng: -149.5585 };
+            const circle = new google.maps.Circle({
+                center: tahiti,
+                radius: 50000 // 50km de rayon pour couvrir toute l'île
+            });
 
-            // Créer un nouveau token de session
-            sessionToken = new google.maps.places.AutocompleteSessionToken();
-
-            // Configuration des champs de saisie
-            setupPlaceAutocomplete('departure');
-            setupPlaceAutocomplete('destination');
-
-            // Listener pour clic sur la carte
-            map.addListener('click', (event) => {
+            // Clic sur la carte
+            map.addListener('click', function(e) {
                 if (selectingForInput) {
-                    handleMapClick(event.latLng);
+                    handleMapClick(e.latLng, selectingForInput);
+                } else {
+                    // Comportement par défaut : définir départ ou destination
+                    const geocoder = new google.maps.Geocoder();
+                    geocoder.geocode({ location: e.latLng }, function(results, status) {
+                        if (status === 'OK' && results[0]) {
+                            if (!departureMarker) {
+                                setDeparture(e.latLng, results[0].formatted_address);
+                            } else if (!destinationMarker) {
+                                setDestination(e.latLng, results[0].formatted_address);
+                            } else {
+                                // Réinitialiser et définir nouveau départ
+                                if (departureMarker) departureMarker.setMap(null);
+                                if (destinationMarker) destinationMarker.setMap(null);
+                                stopMarkers.forEach(marker => { if (marker) marker.setMap(null); });
+                                departureMarker = destinationMarker = null;
+                                stopMarkers = [];
+                                directionsRenderer.set('directions', null);
+                                setDeparture(e.latLng, results[0].formatted_address);
+                            }
+                        }
+                    });
+                }
+            });
+
+            // Autocomplétion pour le départ
+            autocompletes.departure = new google.maps.places.Autocomplete(document.getElementById('departure'));
+            autocompletes.departure.setBounds(circle.getBounds());
+            autocompletes.departure.setOptions({ strictBounds: false });
+            autocompletes.departure.addListener('place_changed', function() {
+                const place = autocompletes.departure.getPlace();
+                if (place.geometry) {
+                    setDeparture(place.geometry.location, place.formatted_address);
+                }
+            });
+
+            // Autocomplétion pour la destination
+            autocompletes.destination = new google.maps.places.Autocomplete(document.getElementById('destination'));
+            autocompletes.destination.setBounds(circle.getBounds());
+            autocompletes.destination.setOptions({ strictBounds: false });
+            autocompletes.destination.addListener('place_changed', function() {
+                const place = autocompletes.destination.getPlace();
+                if (place.geometry) {
+                    setDestination(place.geometry.location, place.formatted_address);
                 }
             });
 
             // Géolocalisation
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const userLocation = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    const userLocation = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    
+                    // Vérifier si la position est près de Tahiti
+                    const bounds = new google.maps.LatLngBounds(
+                        new google.maps.LatLng(-17.9, -150.0),
+                        new google.maps.LatLng(-17.2, -149.1)
+                    );
+                    
+                    if (bounds.contains(userLocation)) {
+                        map.setCenter(userLocation);
+                        map.setZoom(13);
                         
-                        // Vérifier si la position est à Tahiti
-                        const bounds = new google.maps.LatLngBounds(
-                            new google.maps.LatLng(-17.9, -150.0),
-                            new google.maps.LatLng(-17.2, -149.1)
-                        );
-                        
-                        if (bounds.contains(userLocation)) {
-                            map.setCenter(userLocation);
-                            map.setZoom(13);
-                            
-                            // Ajouter un marqueur pour la position actuelle
-                            currentLocationMarker = new google.maps.Marker({
-                                position: userLocation,
-                                map: map,
-                                icon: {
-                                    path: google.maps.SymbolPath.CIRCLE,
-                                    scale: 8,
-                                    fillColor: '#4285F4',
-                                    fillOpacity: 1,
-                                    strokeColor: '#ffffff',
-                                    strokeWeight: 2
-                                },
-                                title: 'Votre position'
-                            });
-                        }
+                        // Marqueur de position actuelle
+                        new google.maps.Marker({
+                            position: userLocation,
+                            map: map,
+                            icon: {
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: '#4285F4',
+                                fillOpacity: 1,
+                                strokeColor: '#ffffff',
+                                strokeWeight: 2
+                            },
+                            title: 'Votre position'
+                        });
                     }
-                );
+                });
             }
-
-            // Masquer le spinner de chargement
-            document.querySelector('.loading-spinner').style.display = 'none';
         }
 
-        // Configuration de l'autocomplétion pour un champ
-        async function setupPlaceAutocomplete(inputId) {
-            const input = document.getElementById(inputId);
-            
-            // Créer le widget d'autocomplétion
-            const placeAutocompleteElement = new google.maps.places.PlaceAutocompleteElement({
-                componentRestrictions: { country: 'pf' },
-                fields: ['formatted_address', 'geometry', 'name'],
-                locationBias: new google.maps.LatLngBounds(
-                    new google.maps.LatLng(-17.9, -150.0),
-                    new google.maps.LatLng(-17.2, -149.1)
-                )
-            });
-            
-            // Remplacer l'input par l'élément d'autocomplétion
-            input.style.display = 'none';
-            input.parentNode.insertBefore(placeAutocompleteElement, input.nextSibling);
-            
-            // Écouter les changements de place
-            placeAutocompleteElement.addEventListener('gmp-placeselect', async (event) => {
-                const place = event.place;
-                if (place && place.location) {
-                    input.value = place.displayName || place.formattedAddress;
-                    calculateRoute();
+        // Gestion du clic sur la carte avec sélection active
+        function handleMapClick(latLng, inputId) {
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ location: latLng }, function(results, status) {
+                if (status === 'OK' && results[0]) {
+                    if (inputId === 'departure') {
+                        setDeparture(latLng, results[0].formatted_address);
+                    } else if (inputId === 'destination') {
+                        setDestination(latLng, results[0].formatted_address);
+                    } else if (inputId.startsWith('stop-')) {
+                        const stopIndex = parseInt(inputId.split('-')[1]);
+                        setStop(stopIndex, latLng, results[0].formatted_address);
+                    }
+                    resetMapSelection();
                 }
             });
-            
-            placeAutocomplete[inputId] = placeAutocompleteElement;
-        }
-
-        // Configuration pour les arrêts
-        async function setupStopAutocomplete(stopIndex) {
-            const inputId = `stop-${stopIndex}`;
-            const input = document.getElementById(inputId);
-            
-            // Créer le widget d'autocomplétion
-            const placeAutocompleteElement = new google.maps.places.PlaceAutocompleteElement({
-                componentRestrictions: { country: 'pf' },
-                fields: ['formatted_address', 'geometry', 'name'],
-                locationBias: new google.maps.LatLngBounds(
-                    new google.maps.LatLng(-17.9, -150.0),
-                    new google.maps.LatLng(-17.2, -149.1)
-                )
-            });
-            
-            // Remplacer l'input par l'élément d'autocomplétion
-            input.style.display = 'none';
-            input.parentNode.insertBefore(placeAutocompleteElement, input.nextSibling);
-            
-            // Écouter les changements de place
-            placeAutocompleteElement.addEventListener('gmp-placeselect', async (event) => {
-                const place = event.place;
-                if (place && place.location) {
-                    input.value = place.displayName || place.formattedAddress;
-                    stops[stopIndex].address = input.value;
-                    calculateRoute();
-                }
-            });
-            
-            placeAutocomplete[inputId] = placeAutocompleteElement;
         }
 
         // Sélection sur la carte
@@ -1088,42 +1107,6 @@
             map.setOptions({ draggableCursor: 'crosshair' });
         }
 
-        // Gérer le clic sur la carte
-        async function handleMapClick(latLng) {
-            if (!selectingForInput) return;
-
-            try {
-                const response = await geocoder.geocode({ location: latLng });
-                
-                if (response.results && response.results[0]) {
-                    const input = document.getElementById(selectingForInput);
-                    input.value = response.results[0].formatted_address;
-                    
-                    // Mettre à jour l'objet stops si c'est un arrêt
-                    if (selectingForInput.startsWith('stop-')) {
-                        const stopIndex = parseInt(selectingForInput.split('-')[1]);
-                        if (stops[stopIndex]) {
-                            stops[stopIndex].address = response.results[0].formatted_address;
-                        }
-                    }
-                    
-                    // Créer un marqueur temporaire
-                    const marker = new google.maps.Marker({
-                        position: latLng,
-                        map: map,
-                        animation: google.maps.Animation.DROP
-                    });
-                    
-                    markers.push(marker);
-                    
-                    calculateRoute();
-                    resetMapSelection();
-                }
-            } catch (error) {
-                console.error('Erreur de géocodage:', error);
-            }
-        }
-
         // Réinitialiser la sélection sur carte
         function resetMapSelection() {
             selectingForInput = null;
@@ -1134,10 +1117,48 @@
             map.setOptions({ draggableCursor: null });
         }
 
+        // Dessiner l'itinéraire
+        function drawRoute() {
+            if (departureMarker && destinationMarker) {
+                // Construire les waypoints à partir des arrêts
+                const waypoints = stops
+                    .filter(stop => stop.location)
+                    .map(stop => ({
+                        location: stop.location,
+                        stopover: true
+                    }));
+
+                directionsService.route({
+                    origin: departureMarker.getPosition(),
+                    destination: destinationMarker.getPosition(),
+                    waypoints: waypoints,
+                    travelMode: 'DRIVING',
+                    unitSystem: google.maps.UnitSystem.METRIC,
+                    region: 'pf'
+                }, function(result, status) {
+                    if (status === 'OK') {
+                        directionsRenderer.setDirections(result);
+                        
+                        // Calculer la distance totale
+                        let totalDistance = 0;
+                        result.routes[0].legs.forEach(leg => {
+                            totalDistance += leg.distance.value;
+                        });
+                        
+                        totalDistanceKm = totalDistance / 1000;
+                        document.getElementById('totalDistance').textContent = totalDistanceKm.toFixed(1) + ' km';
+                        document.getElementById('distanceDisplay').style.display = 'block';
+                        
+                        calculateFare();
+                    }
+                });
+            }
+        }
+
         // Ajouter un arrêt
         function addStop() {
             const stopIndex = stops.length;
-            stops.push({ address: '', duration: 0 });
+            stops.push({ address: '', duration: 0, location: null });
             
             const container = document.getElementById('stopsContainer');
             const stopDiv = document.createElement('div');
@@ -1162,30 +1183,60 @@
             `;
             
             container.appendChild(stopDiv);
-            setupStopAutocomplete(stopIndex);
+            
+            // Ajouter l'autocomplétion pour ce nouvel arrêt
+            const tahiti = { lat: -17.5516, lng: -149.5585 };
+            const circle = new google.maps.Circle({
+                center: tahiti,
+                radius: 50000
+            });
+            
+            autocompletes[`stop-${stopIndex}`] = new google.maps.places.Autocomplete(document.getElementById(`stop-${stopIndex}`));
+            autocompletes[`stop-${stopIndex}`].setBounds(circle.getBounds());
+            autocompletes[`stop-${stopIndex}`].setOptions({ strictBounds: false });
+            autocompletes[`stop-${stopIndex}`].addListener('place_changed', function() {
+                const place = autocompletes[`stop-${stopIndex}`].getPlace();
+                if (place.geometry) {
+                    setStop(stopIndex, place.geometry.location, place.formatted_address);
+                }
+            });
         }
 
         // Supprimer un arrêt
         function removeStop(index) {
+            // Supprimer le marqueur
+            if (stopMarkers[index]) {
+                stopMarkers[index].setMap(null);
+                stopMarkers[index] = null;
+            }
+            
+            // Supprimer l'autocomplétion
+            delete autocompletes[`stop-${index}`];
+            
+            // Supprimer de la liste
             stops.splice(index, 1);
+            stopMarkers.splice(index, 1);
             
-            // Supprimer l'élément d'autocomplétion
-            delete placeAutocomplete[`stop-${index}`];
-            
-            // Reconstruire tous les arrêts
+            // Reconstruire l'interface
             const container = document.getElementById('stopsContainer');
             container.innerHTML = '';
             
             const oldStops = [...stops];
             stops = [];
+            stopMarkers = [];
             
             oldStops.forEach((stop, i) => {
                 addStop();
-                document.getElementById(`stop-${i}`).value = stop.address;
-                document.getElementById(`stop-duration-${i}`).value = stop.duration;
+                if (stop.address) {
+                    document.getElementById(`stop-${i}`).value = stop.address;
+                    document.getElementById(`stop-duration-${i}`).value = stop.duration;
+                    if (stop.location) {
+                        setStop(i, stop.location, stop.address);
+                    }
+                }
             });
             
-            calculateRoute();
+            drawRoute();
         }
 
         // Mettre à jour la durée d'un arrêt
@@ -1195,105 +1246,6 @@
                 stops[index].duration = duration;
             }
             calculateFare();
-        }
-
-        // Calculer l'itinéraire
-        async function calculateRoute() {
-            const departure = document.getElementById('departure').value;
-            const destination = document.getElementById('destination').value;
-            
-            if (!departure || !destination || !directionsService) return;
-            
-            // Effacer les marqueurs précédents
-            markers.forEach(marker => marker.setMap(null));
-            markers = [];
-            
-            // Construire les waypoints
-            const waypoints = stops
-                .filter(stop => stop.address)
-                .map(stop => ({
-                    location: stop.address,
-                    stopover: true
-                }));
-            
-            const request = {
-                origin: departure,
-                destination: destination,
-                waypoints: waypoints,
-                travelMode: google.maps.TravelMode.DRIVING,
-                unitSystem: google.maps.UnitSystem.METRIC,
-                region: 'pf'
-            };
-            
-            try {
-                const result = await directionsService.route(request);
-                directionsRenderer.setDirections(result);
-                
-                // Calculer la distance totale
-                let totalDistance = 0;
-                result.routes[0].legs.forEach(leg => {
-                    totalDistance += leg.distance.value;
-                });
-                
-                totalDistanceKm = totalDistance / 1000;
-                document.getElementById('totalDistance').textContent = totalDistanceKm.toFixed(1) + ' km';
-                document.getElementById('distanceDisplay').style.display = 'block';
-                
-                // Ajouter des marqueurs personnalisés
-                const route = result.routes[0];
-                
-                // Marqueur de départ
-                new google.maps.Marker({
-                    position: route.legs[0].start_location,
-                    map: map,
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 8,
-                        fillColor: '#4CAF50',
-                        fillOpacity: 1,
-                        strokeColor: '#ffffff',
-                        strokeWeight: 2
-                    },
-                    title: 'Départ'
-                });
-                
-                // Marqueurs des arrêts
-                for (let i = 0; i < waypoints.length; i++) {
-                    new google.maps.Marker({
-                        position: route.legs[i].end_location,
-                        map: map,
-                        icon: {
-                            path: google.maps.SymbolPath.CIRCLE,
-                            scale: 8,
-                            fillColor: '#FF9800',
-                            fillOpacity: 1,
-                            strokeColor: '#ffffff',
-                            strokeWeight: 2
-                        },
-                        title: `Arrêt ${i + 1}`
-                    });
-                }
-                
-                // Marqueur de destination
-                new google.maps.Marker({
-                    position: route.legs[route.legs.length - 1].end_location,
-                    map: map,
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 8,
-                        fillColor: '#f44336',
-                        fillOpacity: 1,
-                        strokeColor: '#ffffff',
-                        strokeWeight: 2
-                    },
-                    title: 'Destination'
-                });
-                
-                calculateFare();
-                
-            } catch (error) {
-                console.error('Erreur de calcul d\'itinéraire:', error);
-            }
         }
 
         // Calculer le tarif
@@ -1460,6 +1412,15 @@
 
         // Réinitialiser le formulaire
         function resetForm() {
+            // Effacer les marqueurs
+            if (departureMarker) departureMarker.setMap(null);
+            if (destinationMarker) destinationMarker.setMap(null);
+            stopMarkers.forEach(marker => { if (marker) marker.setMap(null); });
+            departureMarker = null;
+            destinationMarker = null;
+            stopMarkers = [];
+            directionsRenderer.set('directions', null);
+            
             // Réinitialiser tous les champs
             document.getElementById('departure').value = '';
             document.getElementById('destination').value = '';
@@ -1483,21 +1444,9 @@
             document.getElementById('vehicleWarning').classList.remove('show');
             document.getElementById('vanOption').classList.remove('show');
             
-            // Réinitialiser la carte
-            if (directionsRenderer) {
-                directionsRenderer.setDirections({ routes: [] });
-            }
-            
-            // Effacer les marqueurs
-            markers.forEach(marker => marker.setMap(null));
-            markers = [];
-            
             totalDistanceKm = 0;
             updateRateIndicator();
             resetMapSelection();
-            
-            // Créer un nouveau token de session
-            sessionToken = new google.maps.places.AutocompleteSessionToken();
         }
 
         // Ouvrir le modal de demande
@@ -1618,31 +1567,24 @@
             closeRequestModal();
         });
 
-        // Charger la clé API et initialiser Google Maps
-        async function loadGoogleMapsAPI() {
+        // Charger Google Maps depuis Netlify Functions
+        window.addEventListener('load', async function() {
             try {
                 const response = await fetch('/.netlify/functions/get-maps-key');
                 const data = await response.json();
-                
                 if (data.key) {
-                    // Charger Google Maps avec le nouveau système
                     const script = document.createElement('script');
-                    script.src = `https://maps.googleapis.com/maps/api/js?key=${data.key}&loading=async&libraries=maps,places,routes,geocoding,marker&callback=initMap`;
+                    script.src = `https://maps.googleapis.com/maps/api/js?key=${data.key}&libraries=places&callback=initMap`;
                     script.async = true;
                     script.defer = true;
                     document.head.appendChild(script);
                 } else {
                     console.error('Impossible de charger la clé Google Maps');
-                    alert('Erreur de chargement de Google Maps');
                 }
             } catch (error) {
-                console.error('Erreur:', error);
-                alert('Erreur de connexion');
+                console.error('Erreur lors du chargement de la clé:', error);
             }
-        }
-
-        // Initialiser l'application au chargement
-        window.addEventListener('load', loadGoogleMapsAPI);
+        });
     </script>
 </body>
 </html>
