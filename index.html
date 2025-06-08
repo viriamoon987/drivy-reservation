@@ -8,617 +8,7 @@
     <link rel="shortcut icon" type="image/png" href="drivy.png">
     
     <style>
-        };
-
-        async function getGoogleMapsApiKey() {
-            try {
-                const response = await fetch('/.netlify/functions/get-maps-key');
-                const data = await response.json();
-                return data.apiKey;
-            } catch (error) {
-                console.error('Error fetching API key:', error);
-                return null;
-            }
-        }
-
-        async function initMap() {
-            const apiKey = await getGoogleMapsApiKey();
-            if (!apiKey) {
-                document.getElementById('map').innerHTML = 
-                    '<div style="padding: 20px; text-align: center; color: red;">Erreur de chargement de la carte</div>';
-                return;
-            }
-
-            // Load Google Maps API
-            const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMap&loading=async`;
-            script.async = true;
-            script.defer = true;
-            document.head.appendChild(script);
-        }
-
-        function initGoogleMap() {
-            // Center on Tahiti Airport (Faaa)
-            map = new google.maps.Map(document.getElementById('map'), {
-                center: { lat: -17.5537, lng: -149.6070 },
-                zoom: 12,
-                styles: [
-                    {
-                        featureType: "poi",
-                        elementType: "labels",
-                        stylers: [{ visibility: "off" }]
-                    }
-                ]
-            });
-
-            directionsService = new google.maps.DirectionsService();
-            directionsRenderer = new google.maps.DirectionsRenderer({
-                suppressMarkers: false,
-                polylineOptions: {
-                    strokeColor: '#4285F4',
-                    strokeWeight: 6,
-                    strokeOpacity: 0.8
-                }
-            });
-            directionsRenderer.setMap(map);
-
-            autocompleteService = new google.maps.places.AutocompleteService();
-            placesService = new google.maps.places.PlacesService(map);
-
-            // Setup autocomplete for initial inputs
-            setupAutocomplete('departure');
-            setupAutocomplete('destination');
-
-            // Click on map to select location
-            map.addListener('click', function(event) {
-                if (selectingForInput) {
-                    const geocoder = new google.maps.Geocoder();
-                    geocoder.geocode({ location: event.latLng }, function(results, status) {
-                        if (status === 'OK' && results[0]) {
-                            const input = document.getElementById(selectingForInput);
-                            input.value = results[0].formatted_address;
-                            input.dataset.lat = event.latLng.lat();
-                            input.dataset.lng = event.latLng.lng();
-                            
-                            // Reset selection mode
-                            selectingForInput = null;
-                            document.querySelectorAll('.map-pin-btn').forEach(btn => btn.classList.remove('active'));
-                            
-                            calculateRoute();
-                        }
-                    });
-                }
-            });
-        }
-
-        function setupAutocomplete(inputId) {
-            const input = document.getElementById(inputId);
-            const suggestionsDiv = document.getElementById(inputId + '-suggestions');
-            
-            input.addEventListener('input', function() {
-                clearTimeout(searchTimeout);
-                const query = this.value;
-                
-                if (query.length < 3) {
-                    suggestionsDiv.style.display = 'none';
-                    return;
-                }
-                
-                searchTimeout = setTimeout(() => {
-                    searchGooglePlaces(query, inputId);
-                }, 300);
-            });
-            
-            document.addEventListener('click', function(e) {
-                if (!input.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-                    suggestionsDiv.style.display = 'none';
-                }
-            });
-        }
-
-        function searchGooglePlaces(query, inputId) {
-            const suggestionsDiv = document.getElementById(inputId + '-suggestions');
-            
-            if (!autocompleteService) {
-                suggestionsDiv.style.display = 'none';
-                return;
-            }
-
-            const request = {
-                input: query,
-                location: new google.maps.LatLng(-17.5537, -149.6070),
-                radius: 50000,
-                componentRestrictions: { country: 'pf' },
-                types: ['establishment', 'geocode']
-            };
-
-            autocompleteService.getPlacePredictions(request, (predictions, status) => {
-                if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-                    displaySuggestions(predictions.slice(0, 8), suggestionsDiv, inputId);
-                } else {
-                    suggestionsDiv.style.display = 'none';
-                }
-            });
-        }
-
-        function displaySuggestions(results, suggestionsDiv, inputId) {
-            if (results.length > 0) {
-                suggestionsDiv.innerHTML = '';
-                results.forEach(result => {
-                    const div = document.createElement('div');
-                    div.className = 'autocomplete-suggestion';
-                    div.textContent = result.description;
-                    div.onclick = function() {
-                        selectLocation(inputId, result);
-                    };
-                    suggestionsDiv.appendChild(div);
-                });
-                suggestionsDiv.style.display = 'block';
-            } else {
-                suggestionsDiv.style.display = 'none';
-            }
-        }
-
-        function selectLocation(inputId, location) {
-            const input = document.getElementById(inputId);
-            const suggestionsDiv = document.getElementById(inputId + '-suggestions');
-            
-            input.value = location.description;
-            suggestionsDiv.style.display = 'none';
-            
-            if (location.place_id && placesService) {
-                placesService.getDetails({
-                    placeId: location.place_id,
-                    fields: ['geometry', 'name']
-                }, (place, status) => {
-                    if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        input.dataset.lat = place.geometry.location.lat();
-                        input.dataset.lng = place.geometry.location.lng();
-                        calculateRoute();
-                    }
-                });
-            } else {
-                // Fallback: use geocoding service
-                const geocoder = new google.maps.Geocoder();
-                geocoder.geocode({ 
-                    address: location.description,
-                    componentRestrictions: { country: 'PF' }
-                }, (results, status) => {
-                    if (status === 'OK' && results[0]) {
-                        input.dataset.lat = results[0].geometry.location.lat();
-                        input.dataset.lng = results[0].geometry.location.lng();
-                        calculateRoute();
-                    }
-                });
-            }
-        }
-
-        function selectOnMap(inputId) {
-            selectingForInput = inputId;
-            document.querySelectorAll('.map-pin-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelector(`#${inputId}`).parentElement.querySelector('.map-pin-btn').classList.add('active');
-        }
-
-        function addStop() {
-            const stopsContainer = document.getElementById('stopsContainer');
-            const stopIndex = stopsContainer.children.length;
-            
-            const stopDiv = document.createElement('div');
-            stopDiv.className = 'stop-container';
-            stopDiv.innerHTML = `
-                <div class="stop-row">
-                    <div class="stop-input-wrapper location-input">
-                        <span class="location-icon stop-icon">●</span>
-                        <input type="text" id="stop${stopIndex}" placeholder="${currentLang === 'fr' ? 'Arrêt' : 'Stop'} ${stopIndex + 1}">
-                        <button class="map-pin-btn" onclick="selectOnMap('stop${stopIndex}')" title="Sélectionner sur la carte">📍</button>
-                        <div id="stop${stopIndex}-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
-                    </div>
-                    <div class="stop-time-wrapper">
-                        <label>${currentLang === 'fr' ? 'Temps d\'attente (min)' : 'Waiting time (min)'}</label>
-                        <input type="number" id="stopTime${stopIndex}" min="0" value="0" oninput="calculateFare()">
-                    </div>
-                    <button class="remove-stop-btn" onclick="removeStop(${stopIndex})">×</button>
-                </div>
-            `;
-            
-            stopsContainer.appendChild(stopDiv);
-            setupAutocomplete(`stop${stopIndex}`);
-        }
-
-        function removeStop(index) {
-            const stopsContainer = document.getElementById('stopsContainer');
-            const stopContainers = stopsContainer.querySelectorAll('.stop-container');
-            
-            if (stopContainers[index]) {
-                stopContainers[index].remove();
-                
-                // Reindex remaining stops
-                const remainingStops = stopsContainer.querySelectorAll('.stop-container');
-                remainingStops.forEach((stop, i) => {
-                    const input = stop.querySelector('input[id^="stop"]:not([id^="stopTime"])');
-                    const timeInput = stop.querySelector('input[id^="stopTime"]');
-                    const suggestionsDiv = stop.querySelector('.autocomplete-suggestions');
-                    const mapBtn = stop.querySelector('.map-pin-btn');
-                    
-                    input.id = `stop${i}`;
-                    input.placeholder = `${currentLang === 'fr' ? 'Arrêt' : 'Stop'} ${i + 1}`;
-                    
-                    timeInput.id = `stopTime${i}`;
-                    suggestionsDiv.id = `stop${i}-suggestions`;
-                    mapBtn.setAttribute('onclick', `selectOnMap('stop${i}')`);
-                    
-                    const removeBtn = stop.querySelector('.remove-stop-btn');
-                    removeBtn.setAttribute('onclick', `removeStop(${i})`);
-                    
-                    setupAutocomplete(`stop${i}`);
-                });
-                
-                calculateRoute();
-            }
-        }
-
-        function calculateRoute() {
-            if (!directionsService || !directionsRenderer) {
-                return;
-            }
-            
-            const departureInput = document.getElementById('departure');
-            const destinationInput = document.getElementById('destination');
-            
-            if (!departureInput.dataset.lat || !departureInput.dataset.lng || 
-                !destinationInput.dataset.lat || !destinationInput.dataset.lng) {
-                return;
-            }
-            
-            const origin = new google.maps.LatLng(
-                parseFloat(departureInput.dataset.lat),
-                parseFloat(departureInput.dataset.lng)
-            );
-            
-            const destination = new google.maps.LatLng(
-                parseFloat(destinationInput.dataset.lat),
-                parseFloat(destinationInput.dataset.lng)
-            );
-            
-            // Add waypoints for stops
-            const waypoints = [];
-            const stopInputs = document.querySelectorAll('[id^="stop"]:not([id^="stopTime"])');
-            stopInputs.forEach(input => {
-                if (input.dataset.lat && input.dataset.lng) {
-                    waypoints.push({
-                        location: new google.maps.LatLng(
-                            parseFloat(input.dataset.lat),
-                            parseFloat(input.dataset.lng)
-                        ),
-                        stopover: true
-                    });
-                }
-            });
-            
-            const request = {
-                origin: origin,
-                destination: destination,
-                waypoints: waypoints,
-                travelMode: google.maps.TravelMode.DRIVING,
-                unitSystem: google.maps.UnitSystem.METRIC
-            };
-            
-            directionsService.route(request, (result, status) => {
-                if (status === google.maps.DirectionsStatus.OK) {
-                    directionsRenderer.setDirections(result);
-                    
-                    // Calculate total distance
-                    let totalDistance = 0;
-                    result.routes[0].legs.forEach(leg => {
-                        totalDistance += leg.distance.value;
-                    });
-                    
-                    totalDistanceKm = totalDistance / 1000;
-                    
-                    document.getElementById('totalDistance').textContent = totalDistanceKm.toFixed(1) + ' km';
-                    document.getElementById('distanceDisplay').style.display = 'block';
-                    
-                    // Update fare display
-                    const fareContent = document.getElementById('fareContent');
-                    fareContent.innerHTML = `
-                        <div class="disclaimer">${translations[currentLang].disclaimer}</div>
-                        <div class="price" id="totalPrice">1000 XPF</div>
-                        <div class="vehicle-note">${translations[currentLang].vehicleNote}</div>
-                    `;
-                    
-                    calculateFare();
-                } else {
-                    console.error('Directions request failed:', status);
-                }
-            });
-        }
-
-        function toggleLanguage() {
-            currentLang = currentLang === 'fr' ? 'en' : 'fr';
-            
-            const flagImage = document.getElementById('flagImage');
-            if (currentLang === 'fr') {
-                flagImage.src = 'english.png';
-                flagImage.alt = 'English';
-            } else {
-                flagImage.src = 'french.png';
-                flagImage.alt = 'Français';
-            }
-            
-            // Update all text elements
-            Object.keys(translations[currentLang]).forEach(key => {
-                const element = document.getElementById(key);
-                if (element) {
-                    if (element.tagName === 'INPUT' && element.hasAttribute('placeholder')) {
-                        element.placeholder = translations[currentLang][key];
-                    } else {
-                        element.textContent = translations[currentLang][key];
-                    }
-                }
-            });
-            
-            updateRateIndicator();
-            
-            // Update fare display if route exists
-            if (totalDistanceKm > 0) {
-                const fareContent = document.getElementById('fareContent');
-                fareContent.innerHTML = `
-                    <div class="disclaimer">${translations[currentLang].disclaimer}</div>
-                    <div class="price" id="totalPrice">${document.getElementById('totalPrice')?.textContent || '1000 XPF'}</div>
-                    <div class="vehicle-note">${translations[currentLang].vehicleNote}</div>
-                `;
-                calculateFare();
-            }
-        }
-
-        function updateRateIndicator() {
-            const time = document.getElementById('pickupTime').value;
-            const rateIcon = document.getElementById('rateIcon');
-            const rateText = document.getElementById('rateText');
-            
-            if (time) {
-                const hour = parseInt(time.split(':')[0]);
-                const isDay = hour >= 6 && hour < 20;
-                
-                if (isDay) {
-                    rateIcon.textContent = '☀️';
-                    rateText.textContent = translations[currentLang].rateTextDay;
-                } else {
-                    rateIcon.textContent = '🌙';
-                    rateText.textContent = translations[currentLang].rateTextNight;
-                }
-            }
-        }
-
-        function calculateFare() {
-            if (totalDistanceKm === 0) return;
-            
-            let total = 1000; // Base fare
-            
-            // Distance cost
-            const time = document.getElementById('pickupTime').value;
-            let ratePerKm = 160;
-            
-            if (time) {
-                const hour = parseInt(time.split(':')[0]);
-                const isNight = hour < 6 || hour >= 20;
-                if (isNight) ratePerKm = 260;
-            }
-            
-            const distanceCost = Math.round(totalDistanceKm * ratePerKm);
-            total += distanceCost;
-            
-            // Additional costs
-            const passengers = parseInt(document.getElementById('passengers').value || 1);
-            if (passengers >= 5) total += 500;
-            
-            // Waiting time at stops only
-            let totalWaitingTime = 0;
-            const stopTimeInputs = document.querySelectorAll('[id^="stopTime"]');
-            stopTimeInputs.forEach(input => {
-                totalWaitingTime += parseInt(input.value || 0);
-            });
-            
-            if (totalWaitingTime > 0) total += totalWaitingTime * 42;
-            
-            // Baggage
-            const baggageChecked = parseInt(document.getElementById('baggageChecked').value || 0);
-            const baggageCabin = parseInt(document.getElementById('baggageCabin').value || 0);
-            const baggageBags = parseInt(document.getElementById('baggageBags').value || 0);
-            const totalBaggage = baggageChecked + baggageCabin + baggageBags;
-            if (totalBaggage > 0) total += totalBaggage * 100;
-            
-            // Bulky items
-            const bulkyItems = document.getElementById('bulkyItems').value;
-            if (bulkyItems === "1") total += 500;
-            else if (bulkyItems === "plus") total += 500;
-            
-            // Height surcharges
-            if (document.getElementById('departureUpHigh').checked) total += 500;
-            if (document.getElementById('destinationUpHigh').checked) total += 500;
-            
-            // Van booking
-            if (document.getElementById('vanBooking').checked) total += 500;
-            
-            const priceElement = document.getElementById('totalPrice');
-            if (priceElement) {
-                priceElement.textContent = `${total} XPF`;
-            }
-        }
-
-        function toggleVanBooking() {
-            const passengers = parseInt(document.getElementById('passengers').value);
-            const vanOption = document.getElementById('vanOption');
-            
-            if (passengers <= 2) {
-                vanOption.classList.add('show');
-            } else {
-                vanOption.classList.remove('show');
-                document.getElementById('vanBooking').checked = false;
-            }
-            
-            checkVehicleLimit();
-        }
-
-        function checkVehicleLimit() {
-            const baggageChecked = parseInt(document.getElementById('baggageChecked').value || 0);
-            const baggageCabin = parseInt(document.getElementById('baggageCabin').value || 0);
-            const bulkyItems = document.getElementById('bulkyItems').value;
-            const passengers = parseInt(document.getElementById('passengers').value || 1);
-            const vehicleWarning = document.getElementById('vehicleWarning');
-            
-            let needsAdditionalVehicle = false;
-            
-            // Check if additional vehicle needed
-            const totalBaggageEquiv = baggageChecked + (baggageCabin / 2);
-            if (totalBaggageEquiv > 8 || passengers > 8 || bulkyItems === "plus") {
-                needsAdditionalVehicle = true;
-            }
-            
-            if (needsAdditionalVehicle) {
-                vehicleWarning.classList.add('show');
-            } else {
-                vehicleWarning.classList.remove('show');
-            }
-        }
-
-        function resetForm() {
-            // Reset all form fields
-            document.getElementById('departure').value = '';
-            document.getElementById('departure').removeAttribute('data-lat');
-            document.getElementById('departure').removeAttribute('data-lng');
-            document.getElementById('destination').value = '';
-            document.getElementById('destination').removeAttribute('data-lat');
-            document.getElementById('destination').removeAttribute('data-lng');
-            document.getElementById('baggageChecked').value = '0';
-            document.getElementById('baggageCabin').value = '0';
-            document.getElementById('baggageBags').value = '0';
-            document.getElementById('passengers').value = '1';
-            document.getElementById('bulkyItems').value = '0';
-            document.getElementById('departureUpHigh').checked = false;
-            document.getElementById('destinationUpHigh').checked = false;
-            document.getElementById('vanBooking').checked = false;
-            
-            // Clear stops
-            document.getElementById('stopsContainer').innerHTML = '';
-            
-            // Clear route
-            if (directionsRenderer) {
-                directionsRenderer.setDirections({routes: []});
-            }
-            
-            // Reset distance and fare display
-            totalDistanceKm = 0;
-            document.getElementById('distanceDisplay').style.display = 'none';
-            
-            // Reset fare display
-            const fareContent = document.getElementById('fareContent');
-            fareContent.innerHTML = `<div class="route-prompt">${translations[currentLang].routePrompt}</div>`;
-            
-            // Set current time
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            document.getElementById('pickupTime').value = `${hours}:${minutes}`;
-            
-            // Hide warnings
-            document.getElementById('vanOption').classList.remove('show');
-            document.getElementById('vehicleWarning').classList.remove('show');
-            
-            updateRateIndicator();
-        }
-
-        function openRequestModal() {
-            const modal = document.getElementById('requestModal');
-            modal.classList.add('show');
-            
-            // Set default date to tomorrow
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            document.getElementById('tripDate').value = tomorrow.toISOString().split('T')[0];
-        }
-
-        function closeRequestModal() {
-            const modal = document.getElementById('requestModal');
-            modal.classList.remove('show');
-        }
-
-        // Initialize on page load
-        window.addEventListener('DOMContentLoaded', function() {
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            document.getElementById('pickupTime').value = `${hours}:${minutes}`;
-            
-            updateRateIndicator();
-            toggleVanBooking();
-            
-            // Initialize map
-            initMap();
-        });
-
-        // Handle form submission
-        document.getElementById('requestForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            // Get form values and create WhatsApp message
-            const tripDate = document.getElementById('tripDate').value;
-            const firstName = document.getElementById('firstName').value;
-            const lastName = document.getElementById('lastName').value;
-            const departurePoint = document.getElementById('departure').value;
-            const destinationPoint = document.getElementById('destination').value;
-            const flightFerry = document.getElementById('flightFerry').value;
-            const paymentMethod = document.getElementById('paymentMethod');
-            const paymentText = paymentMethod.options[paymentMethod.selectedIndex].text;
-            
-            let message = "*DEMANDE DE COURSE DRIVY*%0A%0A";
-            message += "*Client:* " + firstName + " " + lastName + "%0A";
-            message += "*Date:* " + new Date(tripDate).toLocaleDateString('fr-FR') + "%0A";
-            message += "*Heure:* " + document.getElementById('pickupTime').value + "%0A%0A";
-            message += "*Départ:* " + departurePoint + "%0A";
-            
-            // Add stops if any
-            const stopInputs = document.querySelectorAll('[id^="stop"]:not([id^="stopTime"])');
-            let stopNumber = 1;
-            stopInputs.forEach(input => {
-                if (input.value) {
-                    message += "*Arrêt " + stopNumber + ":* " + input.value + "%0A";
-                    stopNumber++;
-                }
-            });
-            
-            message += "*Destination:* " + destinationPoint + "%0A%0A";
-            
-            if (flightFerry.trim()) {
-                message += "*Vol/Ferry:* " + flightFerry + "%0A%0A";
-            }
-            
-            const passengers = document.getElementById('passengers').value;
-            message += "*Passagers:* " + passengers + "%0A";
-            
-            if (totalDistanceKm > 0) {
-                message += "*Distance:* " + totalDistanceKm.toFixed(1) + " km%0A";
-                message += "*Prix estimé:* " + (document.getElementById('totalPrice')?.textContent || '1000 XPF') + "%0A";
-            }
-            
-            message += "*Paiement:* " + paymentText + "%0A%0A";
-            message += "_Demande via Drivy Calculator_";
-            
-            const whatsappUrl = "https://wa.me/68989263268?text=" + message;
-            window.open(whatsappUrl, '_blank');
-            closeRequestModal();
-        });
-
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('requestModal');
-            if (event.target === modal) {
-                closeRequestModal();
-            }
-        }
-    </script>
-</body>
-</html>* {
+        * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -1433,6 +823,8 @@
         let totalDistanceKm = 0;
         let searchTimeout;
         let selectingForInput = null;
+        let stops = [];
+        let googleMapsKey = null;
 
         const translations = {
             fr: {
@@ -1465,7 +857,9 @@
                 rateTextDay: "Tarif jour",
                 rateTextNight: "Tarif nuit",
                 disclaimer: "C'est une bonne estimation du prix final mais le chauffeur utilisera le taximètre pour avoir le tarif exacte",
-                vehicleNote: "Pour 1 véhicule"
+                vehicleNote: "Pour 1 véhicule",
+                stopLabel: "Arrêt",
+                stopTimeLabel: "Durée d'arrêt (min)"
             },
             en: {
                 headerTitle: "Calculate your trip",
@@ -1497,5 +891,632 @@
                 rateTextDay: "Day rate",
                 rateTextNight: "Night rate",
                 disclaimer: "This is a good estimate of the final price but the driver will use the taximeter for the exact fare",
-                vehicleNote: "For 1 vehicle"
+                vehicleNote: "For 1 vehicle",
+                stopLabel: "Stop",
+                stopTimeLabel: "Stop duration (min)"
             }
+        };
+
+        // Fonction pour charger la clé API Google Maps
+        async function loadGoogleMapsKey() {
+            try {
+                const response = await fetch('/.netlify/functions/get-maps-key');
+                const data = await response.json();
+                if (data.key) {
+                    googleMapsKey = data.key;
+                    loadGoogleMapsScript();
+                } else {
+                    console.error('Impossible de charger la clé Google Maps');
+                }
+            } catch (error) {
+                console.error('Erreur lors du chargement de la clé:', error);
+            }
+        }
+
+        // Fonction pour charger le script Google Maps
+        function loadGoogleMapsScript() {
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsKey}&libraries=places&callback=initMap`;
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+
+        // Initialisation de la carte Google Maps
+        function initMap() {
+            // Centre sur Tahiti
+            const tahitiCenter = { lat: -17.5516, lng: -149.5585 };
+            
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 11,
+                center: tahitiCenter,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: false
+            });
+
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer({
+                map: map,
+                suppressMarkers: false
+            });
+
+            autocompleteService = new google.maps.places.AutocompleteService();
+            placesService = new google.maps.places.PlacesService(map);
+
+            // Configuration des listeners pour les champs de recherche
+            setupLocationInput('departure');
+            setupLocationInput('destination');
+
+            // Listener pour clic sur la carte
+            map.addListener('click', (event) => {
+                if (selectingForInput) {
+                    getAddressFromCoordinates(event.latLng, selectingForInput);
+                }
+            });
+        }
+
+        // Configuration des champs de saisie d'adresse
+        function setupLocationInput(inputId) {
+            const input = document.getElementById(inputId);
+            const suggestionsDiv = document.getElementById(`${inputId}-suggestions`);
+
+            input.addEventListener('input', () => {
+                clearTimeout(searchTimeout);
+                const value = input.value;
+
+                if (value.length < 3) {
+                    suggestionsDiv.style.display = 'none';
+                    return;
+                }
+
+                searchTimeout = setTimeout(() => {
+                    searchPlaces(value, inputId);
+                }, 300);
+            });
+
+            input.addEventListener('focus', () => {
+                if (input.value.length >= 3) {
+                    searchPlaces(input.value, inputId);
+                }
+            });
+
+            // Fermer les suggestions quand on clique ailleurs
+            document.addEventListener('click', (e) => {
+                if (!input.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.style.display = 'none';
+                }
+            });
+        }
+
+        // Configuration pour les arrêts
+        function setupStopLocationInput(stopIndex) {
+            const input = document.getElementById(`stop-${stopIndex}`);
+            const suggestionsDiv = document.getElementById(`stop-${stopIndex}-suggestions`);
+
+            input.addEventListener('input', () => {
+                clearTimeout(searchTimeout);
+                const value = input.value;
+
+                if (value.length < 3) {
+                    suggestionsDiv.style.display = 'none';
+                    return;
+                }
+
+                searchTimeout = setTimeout(() => {
+                    searchPlaces(value, `stop-${stopIndex}`);
+                }, 300);
+            });
+
+            input.addEventListener('focus', () => {
+                if (input.value.length >= 3) {
+                    searchPlaces(input.value, `stop-${stopIndex}`);
+                }
+            });
+
+            // Fermer les suggestions quand on clique ailleurs
+            document.addEventListener('click', (e) => {
+                if (!input.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.style.display = 'none';
+                }
+            });
+        }
+
+        // Recherche de lieux avec Google Places
+        function searchPlaces(query, inputId) {
+            const request = {
+                input: query,
+                bounds: new google.maps.LatLngBounds(
+                    new google.maps.LatLng(-17.9, -150.0),
+                    new google.maps.LatLng(-17.2, -149.1)
+                ),
+                componentRestrictions: { country: 'pf' }
+            };
+
+            autocompleteService.getPlacePredictions(request, (results, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+                    displaySuggestions(results, inputId);
+                }
+            });
+        }
+
+        // Affichage des suggestions
+        function displaySuggestions(predictions, inputId) {
+            const suggestionsDiv = document.getElementById(`${inputId}-suggestions`);
+            suggestionsDiv.innerHTML = '';
+            
+            predictions.forEach(prediction => {
+                const div = document.createElement('div');
+                div.className = 'autocomplete-suggestion';
+                div.textContent = prediction.description;
+                div.onclick = () => selectSuggestion(prediction, inputId);
+                suggestionsDiv.appendChild(div);
+            });
+            
+            suggestionsDiv.style.display = 'block';
+        }
+
+        // Sélection d'une suggestion
+        function selectSuggestion(prediction, inputId) {
+            const input = document.getElementById(inputId);
+            input.value = prediction.description;
+            document.getElementById(`${inputId}-suggestions`).style.display = 'none';
+            
+            // Mettre à jour l'objet stops si c'est un arrêt
+            if (inputId.startsWith('stop-')) {
+                const stopIndex = parseInt(inputId.split('-')[1]);
+                if (stops[stopIndex]) {
+                    stops[stopIndex].address = prediction.description;
+                }
+            }
+            
+            calculateRoute();
+        }
+
+        // Sélection sur la carte
+        function selectOnMap(inputId) {
+            selectingForInput = inputId;
+            
+            // Mettre à jour l'apparence des boutons
+            document.querySelectorAll('.map-pin-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            if (inputId.startsWith('stop-')) {
+                document.querySelector(`#stop-${inputId.split('-')[1]}`).nextElementSibling.classList.add('active');
+            } else {
+                document.querySelector(`#${inputId}`).nextElementSibling.classList.add('active');
+            }
+        }
+
+        // Obtenir l'adresse à partir des coordonnées
+        function getAddressFromCoordinates(latLng, inputId) {
+            const geocoder = new google.maps.Geocoder();
+            
+            geocoder.geocode({ location: latLng }, (results, status) => {
+                if (status === 'OK' && results[0]) {
+                    const input = document.getElementById(inputId);
+                    input.value = results[0].formatted_address;
+                    
+                    // Mettre à jour l'objet stops si c'est un arrêt
+                    if (inputId.startsWith('stop-')) {
+                        const stopIndex = parseInt(inputId.split('-')[1]);
+                        if (stops[stopIndex]) {
+                            stops[stopIndex].address = results[0].formatted_address;
+                        }
+                    }
+                    
+                    calculateRoute();
+                    
+                    // Réinitialiser la sélection
+                    selectingForInput = null;
+                    document.querySelectorAll('.map-pin-btn').forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                }
+            });
+        }
+
+        // Ajouter un arrêt
+        function addStop() {
+            const stopIndex = stops.length;
+            stops.push({ address: '', duration: 0 });
+            
+            const container = document.getElementById('stopsContainer');
+            const stopDiv = document.createElement('div');
+            stopDiv.className = 'stop-container';
+            stopDiv.id = `stop-container-${stopIndex}`;
+            
+            stopDiv.innerHTML = `
+                <div class="stop-row">
+                    <div class="stop-input-wrapper">
+                        <div class="location-input">
+                            <span class="location-icon stop-icon">●</span>
+                            <input type="text" id="stop-${stopIndex}" placeholder="${translations[currentLang].stopLabel} ${stopIndex + 1}">
+                            <button class="map-pin-btn" onclick="selectOnMap('stop-${stopIndex}')" title="Sélectionner sur la carte">📍</button>
+                            <div id="stop-${stopIndex}-suggestions" class="autocomplete-suggestions" style="display: none;"></div>
+                        </div>
+                    </div>
+                    <div class="stop-time-wrapper">
+                        <label>${translations[currentLang].stopTimeLabel}</label>
+                        <input type="number" id="stop-duration-${stopIndex}" min="0" value="0" onchange="updateStopDuration(${stopIndex})">
+                    </div>
+                </div>
+                <button class="remove-stop-btn" onclick="removeStop(${stopIndex})">×</button>
+            `;
+            
+            container.appendChild(stopDiv);
+            setupStopLocationInput(stopIndex);
+        }
+
+        // Supprimer un arrêt
+        function removeStop(index) {
+            stops.splice(index, 1);
+            
+            // Reconstruire tous les arrêts
+            const container = document.getElementById('stopsContainer');
+            container.innerHTML = '';
+            
+            const oldStops = [...stops];
+            stops = [];
+            
+            oldStops.forEach((stop, i) => {
+                addStop();
+                document.getElementById(`stop-${i}`).value = stop.address;
+                document.getElementById(`stop-duration-${i}`).value = stop.duration;
+            });
+            
+            calculateRoute();
+        }
+
+        // Mettre à jour la durée d'un arrêt
+        function updateStopDuration(index) {
+            const duration = parseInt(document.getElementById(`stop-duration-${index}`).value) || 0;
+            if (stops[index]) {
+                stops[index].duration = duration;
+            }
+            calculateFare();
+        }
+
+        // Calculer l'itinéraire
+        function calculateRoute() {
+            const departure = document.getElementById('departure').value;
+            const destination = document.getElementById('destination').value;
+            
+            if (!departure || !destination) return;
+            
+            // Construire les waypoints
+            const waypoints = stops
+                .filter(stop => stop.address)
+                .map(stop => ({
+                    location: stop.address,
+                    stopover: true
+                }));
+            
+            const request = {
+                origin: departure,
+                destination: destination,
+                waypoints: waypoints,
+                travelMode: google.maps.TravelMode.DRIVING,
+                unitSystem: google.maps.UnitSystem.METRIC,
+                region: 'pf'
+            };
+            
+            directionsService.route(request, (result, status) => {
+                if (status === 'OK') {
+                    directionsRenderer.setDirections(result);
+                    
+                    // Calculer la distance totale
+                    let totalDistance = 0;
+                    result.routes[0].legs.forEach(leg => {
+                        totalDistance += leg.distance.value;
+                    });
+                    
+                    totalDistanceKm = totalDistance / 1000;
+                    document.getElementById('totalDistance').textContent = totalDistanceKm.toFixed(1) + ' km';
+                    document.getElementById('distanceDisplay').style.display = 'block';
+                    
+                    calculateFare();
+                }
+            });
+        }
+
+        // Calculer le tarif
+        function calculateFare() {
+            if (totalDistanceKm === 0) return;
+            
+            const pickupTime = document.getElementById('pickupTime').value;
+            const isNightRate = isNightTime(pickupTime);
+            const departureUpHigh = document.getElementById('departureUpHigh').checked;
+            const destinationUpHigh = document.getElementById('destinationUpHigh').checked;
+            const passengers = parseInt(document.getElementById('passengers').value) || 1;
+            const baggageChecked = parseInt(document.getElementById('baggageChecked').value) || 0;
+            const baggageCabin = parseInt(document.getElementById('baggageCabin').value) || 0;
+            const baggageBags = parseInt(document.getElementById('baggageBags').value) || 0;
+            const bulkyItems = document.getElementById('bulkyItems').value;
+            const vanBooking = document.getElementById('vanBooking').checked;
+            
+            // Tarifs de base
+            const baseRate = isNightRate ? 2100 : 1500;
+            const perKmRate = isNightRate ? 180 : 150;
+            
+            // Calcul du tarif de base
+            let fare = baseRate + (totalDistanceKm * perKmRate);
+            
+            // Frais supplémentaires
+            if (departureUpHigh) fare += 1000;
+            if (destinationUpHigh) fare += 1000;
+            
+            // Frais pour arrêts
+            const totalStopTime = stops.reduce((total, stop) => total + stop.duration, 0);
+            fare += totalStopTime * 40; // 40 XPF par minute d'arrêt
+            
+            // Frais bagages
+            fare += baggageChecked * 300;
+            fare += baggageCabin * 200;
+            fare += baggageBags * 100;
+            
+            // Frais encombrants
+            if (bulkyItems === '1') fare += 500;
+            else if (bulkyItems === 'plus') fare += 1000;
+            
+            // Frais van
+            if (vanBooking) fare += 2000;
+            
+            // Afficher le tarif
+            displayFare(fare);
+        }
+
+        // Vérifier si c'est le tarif de nuit
+        function isNightTime(time) {
+            if (!time) return false;
+            const [hours] = time.split(':').map(Number);
+            return hours >= 20 || hours < 6;
+        }
+
+        // Afficher le tarif
+        function displayFare(fare) {
+            const fareContent = document.getElementById('fareContent');
+            fareContent.innerHTML = `
+                <div class="disclaimer">${translations[currentLang].disclaimer}</div>
+                <div class="price">${fare.toLocaleString('fr-FR')} XPF</div>
+                <div class="vehicle-note">${translations[currentLang].vehicleNote}</div>
+            `;
+        }
+
+        // Mettre à jour l'indicateur de tarif
+        function updateRateIndicator() {
+            const pickupTime = document.getElementById('pickupTime').value;
+            const isNight = isNightTime(pickupTime);
+            
+            document.getElementById('rateIcon').textContent = isNight ? '🌙' : '☀️';
+            document.getElementById('rateText').textContent = isNight ? 
+                translations[currentLang].rateTextNight : 
+                translations[currentLang].rateTextDay;
+        }
+
+        // Basculer l'affichage de l'option van
+        function toggleVanBooking() {
+            const passengers = parseInt(document.getElementById('passengers').value) || 1;
+            const vanOption = document.getElementById('vanOption');
+            
+            if (passengers > 4) {
+                vanOption.classList.add('show');
+            } else {
+                vanOption.classList.remove('show');
+                document.getElementById('vanBooking').checked = false;
+            }
+        }
+
+        // Vérifier la limite du véhicule
+        function checkVehicleLimit() {
+            const baggageChecked = parseInt(document.getElementById('baggageChecked').value) || 0;
+            const baggageCabin = parseInt(document.getElementById('baggageCabin').value) || 0;
+            const bulkyItems = document.getElementById('bulkyItems').value;
+            const warning = document.getElementById('vehicleWarning');
+            
+            const totalLargeBaggage = baggageChecked + baggageCabin + (bulkyItems === 'plus' ? 2 : bulkyItems === '1' ? 1 : 0);
+            
+            if (totalLargeBaggage > 4) {
+                warning.classList.add('show');
+            } else {
+                warning.classList.remove('show');
+            }
+        }
+
+        // Basculer la langue
+        function toggleLanguage() {
+            currentLang = currentLang === 'fr' ? 'en' : 'fr';
+            updateLanguage();
+        }
+
+        // Mettre à jour les textes selon la langue
+        function updateLanguage() {
+            const t = translations[currentLang];
+            
+            document.getElementById('headerTitle').textContent = t.headerTitle;
+            document.getElementById('departure').placeholder = t.departurePoint;
+            document.getElementById('destination').placeholder = t.destination;
+            document.getElementById('addStopText').textContent = t.addStopText;
+            document.getElementById('distanceLabel').textContent = t.distanceLabel;
+            document.getElementById('pickupTimeLabel').textContent = t.pickupTimeLabel;
+            document.getElementById('departureUpHighLabel').textContent = t.departureUpHighLabel;
+            document.getElementById('destinationUpHighLabel').textContent = t.destinationUpHighLabel;
+            document.getElementById('passengersLabel').textContent = t.passengersLabel;
+            document.getElementById('vanBookingLabel').textContent = t.vanBookingLabel;
+            document.getElementById('baggageCheckedLabel').textContent = t.baggageCheckedLabel;
+            document.getElementById('baggageCabinLabel').textContent = t.baggageCabinLabel;
+            document.getElementById('baggageBagsLabel').textContent = t.baggageBagsLabel;
+            document.getElementById('bulkyItemsTitle').textContent = t.bulkyItemsTitle;
+            document.getElementById('bulkyItemsSubtitle').textContent = t.bulkyItemsSubtitle;
+            document.getElementById('vehicleWarningText').textContent = t.vehicleWarningText;
+            document.getElementById('routePrompt').textContent = t.routePrompt;
+            document.getElementById('requestRideText').textContent = t.requestRideText;
+            document.getElementById('modalTitle').textContent = t.modalTitle;
+            document.getElementById('tripDateLabel').textContent = t.tripDateLabel;
+            document.getElementById('firstNameLabel').textContent = t.firstNameLabel;
+            document.getElementById('lastNameLabel').textContent = t.lastNameLabel;
+            document.getElementById('flightFerryLabel').textContent = t.flightFerryLabel;
+            document.getElementById('paymentMethodLabel').textContent = t.paymentMethodLabel;
+            document.getElementById('cancelBtn').textContent = t.cancelBtn;
+            document.getElementById('sendBtn').textContent = t.sendBtn;
+            
+            updateRateIndicator();
+            
+            // Mettre à jour le drapeau
+            const flagImage = document.getElementById('flagImage');
+            flagImage.src = currentLang === 'fr' ? 'english.png' : 'french.png';
+            flagImage.alt = currentLang === 'fr' ? 'English' : 'Français';
+            
+            // Mettre à jour les arrêts existants
+            stops.forEach((stop, i) => {
+                const input = document.getElementById(`stop-${i}`);
+                if (input) {
+                    input.placeholder = `${t.stopLabel} ${i + 1}`;
+                }
+            });
+            
+            calculateFare();
+        }
+
+        // Réinitialiser le formulaire
+        function resetForm() {
+            document.getElementById('departure').value = '';
+            document.getElementById('destination').value = '';
+            document.getElementById('pickupTime').value = '';
+            document.getElementById('departureUpHigh').checked = false;
+            document.getElementById('destinationUpHigh').checked = false;
+            document.getElementById('passengers').value = '1';
+            document.getElementById('vanBooking').checked = false;
+            document.getElementById('baggageChecked').value = '0';
+            document.getElementById('baggageCabin').value = '0';
+            document.getElementById('baggageBags').value = '0';
+            document.getElementById('bulkyItems').value = '0';
+            
+            // Supprimer tous les arrêts
+            stops = [];
+            document.getElementById('stopsContainer').innerHTML = '';
+            
+            // Réinitialiser l'affichage
+            document.getElementById('distanceDisplay').style.display = 'none';
+            document.getElementById('fareContent').innerHTML = `<div class="route-prompt" id="routePrompt">${translations[currentLang].routePrompt}</div>`;
+            document.getElementById('vehicleWarning').classList.remove('show');
+            document.getElementById('vanOption').classList.remove('show');
+            
+            // Réinitialiser la carte
+            if (directionsRenderer) {
+                directionsRenderer.setDirections({ routes: [] });
+            }
+            
+            totalDistanceKm = 0;
+            updateRateIndicator();
+        }
+
+        // Ouvrir le modal de demande
+        function openRequestModal() {
+            document.getElementById('requestModal').classList.add('show');
+            
+            // Définir la date par défaut à aujourd'hui
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('tripDate').value = today;
+        }
+
+        // Fermer le modal
+        function closeRequestModal() {
+            document.getElementById('requestModal').classList.remove('show');
+        }
+
+        // Gérer la soumission du formulaire
+        document.getElementById('requestForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const tripDate = document.getElementById('tripDate').value;
+            const firstName = document.getElementById('firstName').value;
+            const lastName = document.getElementById('lastName').value;
+            const flightFerry = document.getElementById('flightFerry').value;
+            const paymentMethod = document.getElementById('paymentMethod').value;
+            
+            // Construire le message WhatsApp
+            let message = `🚕 *DEMANDE DE COURSE DRIVY*\n\n`;
+            message += `📅 Date: ${tripDate}\n`;
+            message += `👤 Client: ${firstName} ${lastName}\n`;
+            message += `⏰ Heure: ${document.getElementById('pickupTime').value || 'Non spécifiée'}\n`;
+            if (flightFerry) {
+                message += `✈️ Vol/Ferry: ${flightFerry}\n`;
+            }
+            message += `\n📍 *ITINÉRAIRE*\n`;
+            message += `Départ: ${document.getElementById('departure').value}\n`;
+            
+            stops.forEach((stop, i) => {
+                if (stop.address) {
+                    message += `Arrêt ${i + 1}: ${stop.address}`;
+                    if (stop.duration > 0) {
+                        message += ` (${stop.duration} min)`;
+                    }
+                    message += '\n';
+                }
+            });
+            
+            message += `Destination: ${document.getElementById('destination').value}\n`;
+            message += `Distance: ${totalDistanceKm.toFixed(1)} km\n`;
+            
+            message += `\n👥 Passagers: ${document.getElementById('passengers').value}\n`;
+            
+            const baggageChecked = parseInt(document.getElementById('baggageChecked').value) || 0;
+            const baggageCabin = parseInt(document.getElementById('baggageCabin').value) || 0;
+            const baggageBags = parseInt(document.getElementById('baggageBags').value) || 0;
+            
+            if (baggageChecked > 0 || baggageCabin > 0 || baggageBags > 0) {
+                message += `\n🧳 *BAGAGES*\n`;
+                if (baggageChecked > 0) message += `Soute: ${baggageChecked}\n`;
+                if (baggageCabin > 0) message += `Cabine: ${baggageCabin}\n`;
+                if (baggageBags > 0) message += `Sacs 5kg: ${baggageBags}\n`;
+            }
+            
+            const bulkyItems = document.getElementById('bulkyItems').value;
+            if (bulkyItems !== '0') {
+                message += `Encombrants: ${bulkyItems === 'plus' ? '2+' : '1'}\n`;
+            }
+            
+            if (document.getElementById('departureUpHigh').checked) {
+                message += `\n⛰️ Départ en hauteur\n`;
+            }
+            if (document.getElementById('destinationUpHigh').checked) {
+                message += `⛰️ Destination en hauteur\n`;
+            }
+            
+            if (document.getElementById('vanBooking').checked) {
+                message += `\n🚐 Réservation d'un Van\n`;
+            }
+            
+            const fareElement = document.querySelector('.fare-display .price');
+            if (fareElement) {
+                message += `\n💰 *TARIF ESTIMÉ*\n`;
+                message += `${fareElement.textContent}\n`;
+            }
+            
+            const paymentMethods = {
+                'cash_xpf': 'Cash en XPF',
+                'cash_usd': 'Cash en USD',
+                'card_eur': 'Visa/MasterCard en EUR',
+                'card_usd': 'Visa/MasterCard en USD'
+            };
+            message += `\n💳 Paiement: ${paymentMethods[paymentMethod]}\n`;
+            
+            // Encoder le message pour WhatsApp
+            const encodedMessage = encodeURIComponent(message);
+            const whatsappNumber = '68987427021'; // Numéro WhatsApp
+            const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+            
+            // Ouvrir WhatsApp
+            window.open(whatsappUrl, '_blank');
+            
+            // Fermer le modal
+            closeRequestModal();
+        });
+
+        // Charger la clé API et initialiser Google Maps au chargement de la page
+        window.addEventListener('load', loadGoogleMapsKey);
+    </script>
+</body>
+</html>
